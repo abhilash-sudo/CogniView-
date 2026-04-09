@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CogniView | Neural Interface</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- MIDNIGHT CYBERPUNK THEME --- */
+        :root {
+            --bg: #0B0E14;
+            --card-bg: rgba(30, 41, 59, 0.6);
+            --text-primary: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --accent: #06B6D4;
+            --accent-glow: 0 0 15px rgba(6, 182, 212, 0.4);
+            --border: rgba(148, 163, 184, 0.15);
+            --red: #FB7185;
+            --green: #34D399;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, var(--bg) 60%);
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            height: 100%;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        /* PANELS */
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        /* VIDEO */
+        .video-container {
+            background: black;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            max-height: 450px;
+        }
+
+        /* NAV */
+        .nav-bar {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .nav-pill {
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .nav-pill:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .nav-pill.active {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent);
+            border-color: var(--accent);
+            box-shadow: var(--accent-glow);
+        }
+
+        /* CONTENT AREA */
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent) transparent;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* LIST ITEMS */
+        .list-row {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 15px;
+            cursor: pointer;
+            transition: 0.2s;
+            color: var(--text-secondary);
+            align-items: center;
+        }
+
+        .list-row:hover {
+            background: rgba(6, 182, 212, 0.05);
+            color: white;
+            padding-left: 25px;
+        }
+
+        .ts-badge {
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--accent);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        /* CHAT */
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .chat-scroll {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .bubble {
+            max-width: 85%;
+            padding: 12px 18px;
+            border-radius: 16px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        .ai {
+            background: rgba(30, 41, 59, 0.8);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+            align-self: flex-start;
+        }
+
+        .user {
+            background: var(--accent);
+            color: #0B0E14;
+            font-weight: 500;
+            border-bottom-right-radius: 4px;
+            align-self: flex-end;
+            box-shadow: var(--accent-glow);
+        }
+
+        /* INPUTS */
+        .chat-input-area,
+        .note-input-container {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        .ios-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 15px;
+            font-size: 1rem;
+            color: white;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        .ios-input:focus {
+            border-color: var(--accent);
+            box-shadow: var(--accent-glow);
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .icon-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .send-btn {
+            background: var(--accent);
+            color: #0B0E14;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.1);
+            box-shadow: var(--accent-glow);
+        }
+
+        .mic-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .mic-btn.listening {
+            background: var(--red);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(251, 113, 133, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(251, 113, 133, 0);
+            }
+        }
+
+        /* QUIZ & NOTES */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .slide-thumb {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .slide-thumb:hover {
+            border-color: var(--accent);
+            transform: scale(1.05);
+        }
+
+        .slide-thumb img {
+            width: 100%;
+            display: block;
+        }
+
+        .note-item {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border);
+            margin: 10px 20px;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+        }
+
+        .magic-btn {
+            background: linear-gradient(135deg, #A855F7, #6366F1);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        .diagram-box {
+            padding: 20px;
+            display: none;
+            background: white;
+            border-radius: 12px;
+            margin: 20px;
+        }
+
+        .lang-select {
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            border: 1px solid var(--border);
+            padding: 5px;
+            border-radius: 6px;
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+
+        /* MATRIX OVERLAY */
+        #matrix-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .rsvp-word {
+            color: #34D399;
+            font-size: 5rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 0 20px #34D399;
+            margin-bottom: 20px;
+        }
+
+        .orp {
+            color: white;
+            text-shadow: 0 0 20px white;
+        }
+
+        /* Optimal Recognition Point */
+        .matrix-controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* FOCUS GUARD OVERLAY */
+        #focus-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+        }
+
+        .focus-alert {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--red);
+            text-transform: uppercase;
+            text-shadow: 0 0 50px var(--red);
+            animation: pulse 1s infinite;
+        }
+
+        .calibration-dot {
+            width: 20px;
+            height: 20px;
+            background: var(--accent);
+            border-radius: 50%;
+            position: fixed;
+            z-index: 2000;
+            display: none;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--accent);
+        }
+
+        /* BINAURAL CONTROLS */
+        #binaural-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--accent);
+            padding: 15px;
+            border-radius: 12px;
+            z-index: 2500;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+            width: 200px;
+        }
+
+        .hz-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: left;
+            transition: 0.2s;
+        }
+
+        .hz-btn:hover,
+        .hz-btn.active {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        /* COGNITIVE HUD */
+        #hud-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+        }
+
+        .hud-reticle {
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px var(--accent);
+            transition: all 0.1s ease-out;
+        }
+
+        .hud-reticle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background: var(--red);
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
+
+        .hud-stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-family: 'Courier New', monospace;
+            color: var(--accent);
+            text-align: right;
+            text-shadow: 0 0 5px var(--accent);
+        }
+
+        .hud-status {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Courier New', monospace;
+            color: var(--accent);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border: 1px solid var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="panel">
+            <div class="video-container">
+                <video id="vid" controls>
+                    <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
+                </video>
+                <div id="hud-layer">
+                    <div id="hud-reticle" class="hud-reticle"></div>
+                    <div class="hud-stats">
+                        <div id="hud-score">FOCUS: 100%</div>
+                        <div id="hud-data">DATA: STABLE</div>
+                    </div>
+                    <div id="hud-msg" class="hud-status">SYSTEM ONLINE</div>
+                </div>
+                <!-- Gesture Canvas (Hidden) -->
+                <canvas id="gesture-canvas" width="320" height="240"
+                    style="position: absolute; bottom: 10px; right: 10px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid var(--accent); opacity: 0.8; display: none;"></canvas>
+                <!-- Emotion Canvas (Hidden) -->
+                <canvas id="emotion-canvas" width="320" height="240"
+                    style="position: absolute; bottom: 10px; right: 180px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid var(--red); opacity: 0.8; display: none;"></canvas>
+            </div>
+        </div>
+        <div class="nav-bar">
+            <button class="nav-pill active" onclick="tab('transcript', this)">Transcript</button>
+            <button class="nav-pill" onclick="tab('notes', this); loadNotes();">📝 Notes</button>
+            <button class="nav-pill" onclick="tab('slides', this)">Slides ({{ slides|length }})</button>
+            <button class="nav-pill" onclick="chapters(this)">Smart Chapters</button>
+            <button class="nav-pill" onclick="quiz(this)">AI Quiz</button>
+            <button class="nav-pill" onclick="podcast(this)">🎙️ Neural Podcast</button>
+            <button class="nav-pill" onclick="mindmap(this)">Mind Map</button>
+        </div>
+        <div id="diagram" class="diagram-box"></div>
+
+        <div id="transcript" class="content-area">
+            {% for s in segments %}
+            <div class="list-row" onclick="jump({{ s.start }})">
+                <span class="ts-badge">{{ (s.start // 60) | int }}:{{ '%02d' % (s.start % 60 | int) }}</span>
+                <span>{{ s.text }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div id="notes" class="content-area hidden">
+            <div id="notes-list" style="padding-top: 10px;"></div>
+            <div style="height: 80px;"></div>
+            <div class="note-input-container" style="position: absolute; bottom: 0; width: 100%;">
+                <input type="text" id="noteInput" class="ios-input"
+                    placeholder="Add a note (e.g. 'Important for exam')..."
+                    onkeypress="if(event.key==='Enter') saveNote()">
+                <button class="btn-circle send-btn" onclick="saveNote()">+</button>
+            </div>
+        </div>
+
+        <div id="slides" class="content-area hidden">
+            <div class="grid">
+                {% for slide in slides %}
+                <div class="slide-thumb" onclick="window.open('{{ url_for('static', filename='slides/' + slide) }}')">
+                    <img src="{{ url_for('static', filename='slides/' + slide) }}" loading="lazy">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div id="chapters" class="content-area hidden">
+            <div id="ch-list" style="padding:20px;"></div>
+        </div>
+        <div id="quiz" class="content-area hidden">
+            <div id="q-list" style="padding:20px;"></div>
+        </div>
+
+        <div id="podcast" class="content-area hidden">
+            <div style="text-align:center; padding:40px;">
+                <h2 style="color:var(--accent); margin-bottom:10px;">NEURAL PODCASTER</h2>
+                <div style="color:var(--text-secondary); margin-bottom:30px;">Hosts: Alex (The Enthusiast) & Sam
+                    (The Expert)</div>
+
+                <!-- Visualizer -->
+                <canvas id="waveCanvas" width="500" height="150"
+                    style="border-radius:12px; background:rgba(0,0,0,0.3); border:1px solid var(--border); box-shadow:var(--accent-glow);"></canvas>
+
+                <div style="margin-top:30px; display:flex; justify-content:center; gap:20px;">
+                    <button class="btn-circle send-btn" style="width:auto; padding:0 30px; border-radius:12px;"
+                        onclick="startPodcast()">
+                        ▶️ Generate & Play
+                    </button>
+                    <button class="btn-circle"
+                        style="width:auto; padding:0 30px; border-radius:12px; background:rgba(255,255,255,0.1); color:white; border:1px solid var(--border);"
+                        onclick="stopPodcast()">
+                        ⏹️ Stop
+                    </button>
+                </div>
+                <div id="podStatus" style="margin-top:20px; font-weight:bold; color:var(--text-secondary);">Ready to
+                    synthesize conversation.</div>
+                <div id="focus-overlay">
+                    <div class="focus-alert">⚠️ FOCUS LOST ⚠️</div>
+                    <div style="color:white; font-size:1.5rem; margin-top:20px;">Return your gaze to the video to
+                        resume.</div>
+                </div>
+
+                <!-- Binaural Panel -->
+                <div id="binaural-panel">
+                    <div style="color:var(--accent); font-weight:bold; font-size:0.9rem; margin-bottom:5px;">
+                        CEREBRAL HERTZ</div>
+                    <button class="hz-btn" onclick="setWave('alpha')">🌊 Alpha (Relax)</button>
+                    <button class="hz-btn" onclick="setWave('theta')">🎨 Theta (Create)</button>
+                    <button class="hz-btn" onclick="setWave('gamma')">⚡ Gamma (Focus)</button>
+                    <button class="hz-btn" onclick="setWave('off')" style="color:var(--red)">⏹️ Stop</button>
+                    <input type="range" min="0" max="1" step="0.1" value="0.1" oninput="setVol(this.value)"
+                        style="margin-top:5px;">
+                </div>
+                <div id="script-container"
+                    style="padding:20px; max-width:600px; margin:0 auto; font-family:'Courier New', monospace; opacity:0.8;">
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="chat-header">
+                <span>CogniView Module</span>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select id="lang" class="lang-select">
+                        <option value="en">EN</option>
+                        <option value="es">ES</option>
+                        <option value="fr">FR</option>
+                        <option value="hi">HI</option>
+                    </select>
+                    <button class="icon-btn" onclick="startMatrix()">⚡ SPEED LEARN</button>
+                    <button class="icon-btn" onclick="toggleFocusGuard()">👁️ FOCUS GUARD</button>
+                    <button class="icon-btn" onclick="listen()">🎧</button>
+                    <button class="icon-btn" onclick="startMatrix()">⚡ SPEED LEARN</button>
+                    <button class="icon-btn" onclick="toggleBinaural()">🧠 HERTZ</button>
+                    <button class="icon-btn" onclick="toggleHUD()">📊 HUD</button>
+                    <button class="icon-btn" onclick="toggleGestures()">🖐️ TELEKINESIS</button>
+                    <button class="icon-btn" onclick="toggleEmotion()">🎭 EMOTION</button>
+                    <button class="icon-btn" onclick="toggleFocusGuard()">👁️ FOCUS GUARD</button>
+                    <button class="icon-btn" onclick="listen()">🎧</button>
+                </div>
+            </div>
+            <div id="chat" class="chat-scroll">
+                <div class="bubble ai">System Online. Awaiting queries.</div>
+            </div>
+            <div class="chat-input-area">
+                <button id="micBtn" class="btn-circle mic-btn" onclick="toggleVoice()">🎤</button>
+                <input type="text" id="inp" class="ios-input" placeholder="Query Neural Database..."
+                    onkeypress="if(event.key==='Enter') send()">
+                <button class="btn-circle send-btn" onclick="send()">↑</button>
+            </div>
+            <audio id="audio" style="display:none"></audio>
+        </div>
+    </div>
+
+    <div id="matrix-overlay">
+        <div id="rsvp-display" class="rsvp-word">READY</div>
+        <div class="matrix-controls">
+            <input type="range" id="wpmSlider" min="200" max="1000" step="50" value="400"
+                oninput="updateWPM(this.value)">
+            <span id="wpmDisplay" style="color:var(--text-secondary); font-family:monospace;">400 WPM</span>
+            <button class="btn-circle send-btn" onclick="toggleRSVP()">⏯</button>
+            <button class="btn-circle" style="background:var(--red); color:white;" onclick="closeMatrix()">✖</button>
+        </div>
+        <div id="rsvp-progress"
+            style="width:50%; height:4px; background:rgba(255,255,255,0.1); margin-top:20px; border-radius:2px;">
+            <div id="rsvp-bar" style="width:0%; height:100%; background:var(--accent); transition:width 0.1s linear;">
+            </div>
+        </div>
+    </div>
+
+    <div id="focus-overlay">
+        <div class="focus-alert">⚠️ FOCUS LOST ⚠️</div>
+        <div style="color:white; font-size:1.5rem; margin-top:20px;">Return your gaze to the video to resume.</div>
+    </div>
+
+    <!-- Calibration Dots -->
+    <div id="pt1" class="calibration-dot" style="top:5%; left:5%" onclick="cal(this)"></div>
+    <div id="pt2" class="calibration-dot" style="top:5%; left:50%" onclick="cal(this)"></div>
+    <div id="pt3" class="calibration-dot" style="top:5%; right:5%" onclick="cal(this)"></div>
+    <div id="pt4" class="calibration-dot" style="top:50%; left:5%" onclick="cal(this)"></div>
+    <div id="pt5" class="calibration-dot" style="top:50%; left:50%" onclick="cal(this)"></div>
+    <div id="pt6" class="calibration-dot" style="top:50%; right:5%" onclick="cal(this)"></div>
+    <div id="pt7" class="calibration-dot" style="bottom:5%; left:5%" onclick="cal(this)"></div>
+    <div id="pt8" class="calibration-dot" style="bottom:5%; left:50%" onclick="cal(this)"></div>
+    <div id="pt9" class="calibration-dot" style="bottom:5%; right:5%" onclick="cal(this)"></div>
+
+    <script>
+        const VIDEO_ID = {{ video_id }};
+
+        // --- NOTES LOGIC ---
+        async function loadNotes() {
+            const r = await fetch(`/get_notes/${VIDEO_ID}`);
+            const notes = await r.json();
+            const list = document.getElementById('notes-list');
+            list.innerHTML = notes.map(n => {
+                let m = Math.floor(n.timestamp / 60);
+                let s = Math.floor(n.timestamp % 60);
+                let ts = `${m}:${s.toString().padStart(2, '0')}`;
+                return `
+            <div class="note-item">
+                <span style="color:var(--accent); font-weight:bold; cursor:pointer;" onclick="jump(${n.timestamp})">[${ts}]</span>
+                <span id="txt-${n.id}">${n.text}</span>
+                <div style="text-align:right;">
+                    <button class="magic-btn" onclick="magicFix(${n.id}, '${n.text.replace(/'/g, "\\'")}')">✨ Polish</button>
+                </div>
+            </div>`;
+            }).join('');
+        }
+
+        async function saveNote() {
+            const inp = document.getElementById('noteInput');
+            const text = inp.value.trim();
+            if (!text) return;
+            const vid = document.getElementById('vid');
+            await fetch('/save_note', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_id: VIDEO_ID, timestamp: vid.currentTime, text: text })
+            });
+            inp.value = "";
+            loadNotes();
+        }
+
+        async function magicFix(id, text) {
+            const el = document.getElementById(`txt-${id}`);
+            el.innerHTML = "✨ Optimizing...";
+            const r = await fetch('/magic_fix', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            });
+            const d = await r.json();
+            el.innerHTML = d.response;
+        }
+
+        // --- STANDARD LOGIC ---
+        let recognition;
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = false; recognition.interimResults = false; recognition.lang = "en-US";
+            recognition.onstart = function () { document.getElementById('micBtn').classList.add('listening'); document.getElementById('inp').placeholder = "Listening..."; };
+            recognition.onend = function () { document.getElementById('micBtn').classList.remove('listening'); document.getElementById('inp').placeholder = "Query Neural Database..."; };
+            recognition.onresult = function (event) { document.getElementById('inp').value = event.results[0][0].transcript; setTimeout(send, 500); };
+        }
+        function toggleVoice() { if (!recognition) { alert("Use Chrome for Voice"); return; } document.getElementById('micBtn').classList.contains('listening') ? recognition.stop() : recognition.start(); }
+
+        function tab(id, btn) {
+            document.querySelectorAll('.content-area').forEach(e => e.classList.add('hidden'));
+            document.getElementById('diagram').style.display = 'none';
+            document.querySelectorAll('.nav-pill').forEach(e => e.classList.remove('active'));
+            document.getElementById(id).classList.remove('hidden');
+            if (btn) btn.classList.add('active');
+            if (id === 'transcript' && document.getElementById('diagram').innerHTML.trim() !== "") document.getElementById('diagram').style.display = 'block';
+        }
+        function jump(s) { const v = document.getElementById('vid'); v.currentTime = s; v.play(); }
+
+        async function send() {
+            const i = document.getElementById('inp'); const txt = i.value.trim(); if (!txt) return;
+            i.value = '';
+            const c = document.getElementById('chat');
+            c.innerHTML += `<div class="bubble user">${txt}</div>`; c.scrollTop = c.scrollHeight;
+            const vid = document.getElementById('vid');
+            const currentTime = vid ? vid.currentTime : 0;
+            const lang = document.getElementById('lang').value;
+            try {
+                const r = await fetch('/chat', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: txt, timestamp: currentTime, lang: lang })
+                });
+                const d = await r.json();
+                if (d.response.includes('mermaid')) {
+                    if (window.renderMap) { window.renderMap(d.response); tab('transcript', document.querySelector('.nav-pill')); c.innerHTML += `<div class="bubble ai">🧠 Mind Map generated!</div>`; }
+                } else {
+                    let fmt = d.response
+                        .replace(/\[(\d+):(\d+)\]/g, (m, mn, sc) => `<a href="#" onclick="jump(${parseInt(mn) * 60 + parseInt(sc)});return false;" style="color:var(--accent);text-decoration:none;font-weight:bold">${m}</a>`)
+                        .replace(/\n/g, '<br>')
+                        .replace(/ /g, '&nbsp;'); // preserve structural spacing
+                    c.innerHTML += `<div class="bubble ai" style="font-family: monospace;">${fmt}</div>`;
+                }
+            } catch (e) { c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`; }
+            c.scrollTop = c.scrollHeight;
+        }
+
+        async function chapters(btn) { tab('chapters', btn); const l = document.getElementById('ch-list'); if (l.innerHTML) return; l.innerHTML = 'Scanning Neural data...'; try { const r = await fetch('/chapters', { method: 'POST' }); const d = await r.json(); l.innerHTML = JSON.parse(d.chapters).map(c => `<div class="list-row" onclick="jump(${c.seconds})"><b style="color:var(--accent)">${c.timestamp}</b>&nbsp; ${c.title}</div>`).join(''); } catch (e) { l.innerHTML = "Analysis Failed."; } }
+        async function quiz(btn) { tab('quiz', btn); const l = document.getElementById('q-list'); if (l.innerHTML) return; l.innerHTML = 'Generating Assessment...'; try { const r = await fetch('/quiz', { method: 'POST' }); const d = await r.json(); const qs = JSON.parse(d.quiz_data); l.innerHTML = qs.map((q, i) => `<div style="background:rgba(255,255,255,0.05);padding:15px;border-radius:12px;margin-bottom:10px;"><b>${i + 1}. ${q.q}</b><br>${q.options.map((o, oi) => `<button onclick="this.style.background='${oi === q.correct ? 'var(--green)' : 'var(--red)'}';this.style.color='black'" style="display:block;width:100%;margin:5px 0;padding:8px;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.3);color:white;text-align:left;cursor:pointer;">${o}</button>`).join('')}</div>`).join(''); } catch (e) { l.innerHTML = "Quiz Generation Failed."; } }
+
+        // --- PODCAST LOGIC ---
+        let synth = window.speechSynthesis;
+        let podLoop = false;
+
+        async function podcast(btn) { tab('podcast', btn); initVisualizer(); }
+
+        async function startPodcast() {
+            if (synth.speaking) synth.cancel();
+            const stat = document.getElementById('podStatus');
+            const scr = document.getElementById('script-container');
+            stat.textContent = "Creating script (this takes a moment)...";
+            podLoop = true;
+
+            try {
+                const r = await fetch('/podcast', { method: 'POST' });
+                const d = await r.json();
+                const script = JSON.parse(d.script);
+
+                scr.innerHTML = "";
+                stat.textContent = "Playing...";
+
+                // Get Voices
+                let voices = synth.getVoices();
+                // Try to find distinct voices
+                let v1 = voices.find(v => v.name.includes("Google US English")) || voices[0];
+                let v2 = voices.find(v => v.name.includes("Google UK English Male")) || voices[1] || v1;
+
+                for (let i = 0; i < script.length; i++) {
+                    if (!podLoop) break;
+                    const line = script[i];
+
+                    // UI Update
+                    const p = document.createElement('div');
+                    p.style = `margin-bottom:10px; color:${line.speaker === 'Alex' ? 'var(--accent)' : 'var(--green)'}`;
+                    p.innerHTML = `<b>${line.speaker}:</b> ${line.text}`;
+                    scr.appendChild(p);
+                    scr.scrollTop = scr.scrollHeight;
+
+                    // Speak
+                    await speakLine(line.text, line.speaker === 'Alex' ? v1 : v2, line.speaker === 'Alex' ? 1.1 : 0.9);
+                }
+                stat.textContent = "Finished.";
+                podLoop = false;
+
+            } catch (e) { stat.textContent = "Error: " + e; }
+        }
+
+        function speakLine(text, voice, pitch) {
+            return new Promise(resolve => {
+                const u = new SpeechSynthesisUtterance(text);
+                u.voice = voice;
+                u.pitch = pitch;
+                u.rate = 1.1;
+                u.onend = resolve;
+                synth.speak(u);
+            });
+        }
+
+        function stopPodcast() { synth.cancel(); podLoop = false; document.getElementById('podStatus').textContent = "Stopped."; }
+
+        function initVisualizer() {
+            const c = document.getElementById('waveCanvas');
+            const ctx = c.getContext('2d');
+            let t = 0;
+            function draw() {
+                if (!podLoop) { ctx.clearRect(0, 0, 500, 150); requestAnimationFrame(draw); return; }
+
+                ctx.fillStyle = 'rgba(11, 14, 20, 0.2)'; // fade effect
+                ctx.fillRect(0, 0, 500, 150);
+
+                ctx.beginPath();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = synth.speaking ? '#06B6D4' : '#333';
+
+                for (let x = 0; x < 500; x += 5) {
+                    let y = 75 + Math.sin(x * 0.05 + t) * (synth.speaking ? 30 : 2);
+                    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                t += 0.2;
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+        async function listen() { const c = document.getElementById('chat'); c.innerHTML += `<div class="bubble ai">🎧 Synthesizing voice...</div>`; try { const r1 = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: "Summarize for audio" }) }); const d1 = await r1.json(); const r2 = await fetch('/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: d1.response }) }); const d2 = await r2.json(); const a = document.getElementById('audio'); a.src = d2.audio_url; a.play(); c.innerHTML += `<div class="bubble ai">▶️ Audio Stream Active</div>`; } catch (e) { c.innerHTML += `<div class="bubble ai">Audio Stream Failed.</div>`; } }
+
+        function mindmap(btn) { send(); document.getElementById('inp').value = "Create mermaid flowchart"; send(); }
+        function pdf() { window.location.href = "/get_pdf"; }
+    </script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+        window.renderMap = async (c) => {
+            const e = document.getElementById('diagram');
+            e.style.display = 'block';
+
+            // Strictly extract mermaid code
+            let clean = c;
+            const match = c.match(/```(?:mermaid)?\n([\s\S]*?)```/);
+            if (match) {
+                clean = match[1];
+            } else if (c.includes('graph ') || c.includes('flowchart ')) {
+                // Rescue block if LLM forgets backticks
+                let idx = c.indexOf('graph ');
+                if (idx === -1) idx = c.indexOf('flowchart ');
+                clean = c.substring(idx);
+            } else {
+                clean = c.replace(/```mermaid/g, '').replace(/```/g, ''); // Fallback
+            }
+
+            clean = clean.trim();
+            console.log("Extracted Mermaid Code:", clean); // Debugging
+
+            e.textContent = clean; // Use textContent to prevent > from turning into &gt;
+            e.removeAttribute('data-processed');
+
+            try {
+                await mermaid.run({ nodes: [e] });
+            } catch (err) {
+                console.error("Mermaid Syntax Error:", err);
+                e.innerHTML = `<div style='color:var(--red); padding:20px; font-family:monospace;'>⚠️ AI generated invalid mind map syntax.<br><br><small>${err.message}</small></div>`;
+            }
+        }
+    </script>
+
+    <script>
+        // --- MATRIX SPEED READER (RSVP) ---
+        let rsvpWords = [];
+        let rsvpIndex = 0;
+        let rsvpInterval;
+        let rsvpRunning = false;
+        let wpm = 400;
+
+        function startMatrix() {
+            // Collect text from transcript segments
+            const els = document.querySelectorAll('#transcript .list-row span:last-child');
+            let fullText = Array.from(els).map(e => e.innerText).join(" ");
+            rsvpWords = fullText.split(/\s+/);
+            rsvpIndex = 0;
+
+            document.getElementById('matrix-overlay').style.display = 'flex';
+            renderWord("READY");
+        }
+
+        function closeMatrix() {
+            clearInterval(rsvpInterval);
+            rsvpRunning = false;
+            document.getElementById('matrix-overlay').style.display = 'none';
+        }
+
+        function toggleRSVP() {
+            if (rsvpRunning) {
+                clearInterval(rsvpInterval);
+                rsvpRunning = false;
+            } else {
+                rsvpRunning = true;
+                const delay = 60000 / wpm;
+                rsvpInterval = setInterval(rsvpStep, delay);
+            }
+        }
+
+        function updateWPM(val) {
+            wpm = val;
+            document.getElementById('wpmDisplay').textContent = val + " WPM";
+            if (rsvpRunning) {
+                clearInterval(rsvpInterval);
+                const delay = 60000 / wpm;
+                rsvpInterval = setInterval(rsvpStep, delay);
+            }
+        }
+
+        function rsvpStep() {
+            if (rsvpIndex >= rsvpWords.length) {
+                clearInterval(rsvpInterval);
+                rsvpRunning = false;
+                renderWord("DONE");
+                return;
+            }
+            renderWord(rsvpWords[rsvpIndex]);
+
+            // Progress
+            const pct = (rsvpIndex / rsvpWords.length) * 100;
+            document.getElementById('rsvp-bar').style.width = pct + "%";
+
+            rsvpIndex++;
+        }
+
+        function renderWord(word) {
+            // Find "Optimal Recognition Point" (ORP) - roughly center/left-center
+            const center = Math.ceil((word.length - 1) / 2); // 0-indexed center
+            const pre = word.substring(0, center);
+            const mid = word.charAt(center);
+            const post = word.substring(center + 1);
+
+            const html = `<span>${pre}</span><span class="orp">${mid}</span><span>${post}</span>`;
+            document.getElementById('rsvp-display').innerHTML = html;
+        }
+
+        // --- FOCUS GUARD & HUD LOGIC ---
+        let focusActive = false;
+        let hudActive = false;
+        let calPoints = 0;
+        let focusScore = 100;
+
+        function toggleHUD() {
+            hudActive = !hudActive;
+            document.getElementById('hud-layer').style.display = hudActive ? 'block' : 'none';
+            if (hudActive && !focusActive && !webgazer.isReady()) {
+                alert("Please activate Focus Guard first to enable tracking.");
+                toggleHUD(); // turn off
+            }
+        }
+
+        function toggleFocusGuard() {
+            if (!focusActive) {
+                if (gestureActive) {
+                    alert("⚠️ Conflict: Please disable TELEKINESIS first.\nThey both fight for the camera stream!");
+                    return;
+                }
+                if (!confirm("⚠️ ACTIVATE NEURAL FOCUS GUARD?\n\nThis will monitor your eye movements.\n1. Allow Camera Access.\n2. Click the 9 RED DOTS to calibrate.\n3. The video will PAUSE if you look away.")) return;
+                startCalibration();
+            } else {
+                webgazer.end();
+                // Force reload to clear camera stream if webgazer doesn't release it
+                // Actually webgazer.end() should be enough, but let's be safe
+                const vid = document.getElementById('vid');
+                if (vid.paused) vid.play();
+                document.getElementById('focus-overlay').style.display = 'none';
+                focusActive = false;
+                alert("Focus Guard Deactivated.");
+            }
+        }
+
+        function startCalibration() {
+            document.querySelectorAll('.calibration-dot').forEach(e => e.style.display = 'block');
+            webgazer.setGazeListener(function (data, timestamp) {
+                if (data == null || !focusActive) return;
+
+                const vid = document.getElementById('vid');
+                const overlay = document.getElementById('focus-overlay');
+                const rect = vid.getBoundingClientRect();
+
+                // HUD Logic
+                if (hudActive) {
+                    const reticle = document.getElementById('hud-reticle');
+                    // Offset relative to video container if possible, but absolute page coords work for fixed overlay
+                    // We need to map screen coords to the video container relative if we want it inside
+                    // But our HUD layer is absolute 100% of video container.
+                    // Let's assume hud-layer is relative to video-container (which should be positioned relative)
+                    // The video-container css needs position:relative!
+
+                    // Actually, let's just use the client rects
+                    let rx = data.x - rect.left;
+                    let ry = data.y - rect.top;
+
+                    reticle.style.left = rx + 'px';
+                    reticle.style.top = ry + 'px';
+                }
+
+                // Simple Hit Test: Is gaze inside video box?
+                // Expanding tolerance by 100px
+                const x = data.x; const y = data.y;
+                const hit = (x > rect.left - 100 && x < rect.right + 100 && y > rect.top - 100 && y < rect.bottom + 100);
+
+                // Score Calculation
+                if (hit) {
+                    focusScore = Math.min(100, focusScore + 0.2);
+                } else {
+                    focusScore = Math.max(0, focusScore - 0.5);
+                }
+
+                if (hudActive) {
+                    document.getElementById('hud-score').innerText = `FOCUS: ${Math.floor(focusScore)}%`;
+                    document.getElementById('hud-reticle').style.borderColor = hit ? 'var(--accent)' : 'var(--red)';
+                    document.getElementById('hud-msg').innerText = hit ? "SYSTEM ONLINE" : "TARGET LOST";
+                    document.getElementById('hud-msg').style.color = hit ? "var(--accent)" : "var(--red)";
+                }
+
+                if (hit) {
+                    overlay.style.display = 'none';
+                    if (vid.paused) vid.play();
+                } else {
+                    overlay.style.display = 'flex';
+                    if (!vid.paused) vid.pause();
+                }
+            }).begin();
+            focusActive = true;
+        }
+
+        function cal(el) {
+            el.style.backgroundColor = '#34D399'; // Green means calibrated
+            calPoints++;
+            if (calPoints >= 9) {
+                alert("CALIBRATION COMPLETE. \n\nFocus Guard is ACTIVE. \nLook at the video to play.");
+                document.querySelectorAll('.calibration-dot').forEach(e => e.style.display = 'none');
+            }
+        }
+    </script>
+
+    <script>
+        // --- TELEKINETIC CONTROL (MEDIAPIPE HANDS) ---
+        let hands;
+        let camera;
+        let gestureActive = false;
+        let lastGesture = "";
+        let gestureCanvasElement;
+        let gestureCanvasCtx;
+
+        function toggleGestures() {
+            if (focusActive) {
+                alert("⚠️ Conflict: Please disable FOCUS GUARD first.\nThey both fight for the camera stream!");
+                return;
+            }
+            gestureActive = !gestureActive;
+            document.getElementById('gesture-canvas').style.display = gestureActive ? 'block' : 'none';
+
+            if (gestureActive) startGestures();
+            else stopGestures();
+        }
+
+        function startGestures() {
+            if (!hands) {
+                gestureCanvasElement = document.getElementById('gesture-canvas');
+                gestureCanvasCtx = gestureCanvasElement.getContext('2d');
+
+                hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                    }
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onGestureResults);
+            }
+
+            if (!camera) {
+                // We need a video element for the camera to feed into
+                // WebGazer might have created one, but we are separate
+                // Let's assume we can create our own purely for MediaPipe logic
+                const camVideo = document.createElement('video');
+                camVideo.style.display = "none";
+                document.body.appendChild(camVideo);
+
+                camera = new Camera(camVideo, {
+                    onFrame: async () => {
+                        if (gestureActive) await hands.send({ image: camVideo });
+                    },
+                    width: 320,
+                    height: 240
+                });
+                camera.start();
+            }
+        }
+
+        function stopGestures() {
+            if (camera) {
+                camera.stop();
+                camera = null;
+            }
+            gestureActive = false;
+            document.getElementById('gesture-canvas').style.display = 'none';
+        }
+
+        function onGestureResults(results) {
+            if (!gestureActive) return;
+
+            gestureCanvasCtx.save();
+            gestureCanvasCtx.clearRect(0, 0, gestureCanvasElement.width, gestureCanvasElement.height);
+            gestureCanvasCtx.drawImage(results.image, 0, 0, gestureCanvasElement.width, gestureCanvasElement.height);
+
+            const vid = document.getElementById('vid');
+
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(gestureCanvasCtx, landmarks, HAND_CONNECTIONS, { color: '#06B6D4', lineWidth: 5 });
+                    drawLandmarks(gestureCanvasCtx, landmarks, { color: '#F8FAFC', lineWidth: 2 });
+
+                    // GESTURE LOGIC
+                    // Simple Open vs Closed logic
+                    // Count extended fingers
+                    let fingers = 0;
+                    // Tips: 4 (Thumb), 8 (Index), 12 (Middle), 16 (Ring), 20 (Pinky)
+                    // Bases: 2, 5, 9, 13, 17
+
+                    // Thumb (check x dist mostly) - simplified to just 4 logic
+                    // Index
+                    if (landmarks[8].y < landmarks[5].y) fingers++;
+                    if (landmarks[12].y < landmarks[9].y) fingers++;
+                    if (landmarks[16].y < landmarks[13].y) fingers++;
+                    if (landmarks[20].y < landmarks[17].y) fingers++;
+
+                    let currentGesture = "";
+                    if (fingers >= 4) currentGesture = "OPEN"; // Pause
+                    else if (fingers == 0) currentGesture = "FIST"; // Play
+                    else if (fingers == 1 || fingers == 2) currentGesture = "POINT"; // Seek?
+
+                    // Draw Text
+                    gestureCanvasCtx.fillStyle = "white";
+                    gestureCanvasCtx.font = "30px Arial";
+                    gestureCanvasCtx.fillText(currentGesture, 10, 30);
+
+                    // Debounce / Trigger
+                    if (currentGesture !== lastGesture) {
+                        if (currentGesture === "OPEN") {
+                            vid.pause();
+                            showToast("✋ PAUSED");
+                        }
+                        if (currentGesture === "FIST") {
+                            vid.play();
+                            showToast("✊ PLAYING");
+                        }
+                        lastGesture = currentGesture;
+                    }
+                }
+            }
+            gestureCanvasCtx.restore();
+        }
+
+        function showToast(msg) {
+            // Reuse HUD Msg or create one
+            const hudMsg = document.getElementById('hud-msg');
+            // Only if HUD is visible? Or force it?
+            // Let's create a temp toast
+            let t = document.createElement('div');
+            t.style = "position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:4rem; color:var(--accent); font-weight:bold; text-shadow:0 0 20px var(--accent); opacity:0; transition:0.2s; z-index:9999;";
+            t.innerText = msg;
+            document.body.appendChild(t);
+            requestAnimationFrame(() => t.style.opacity = 1);
+            setTimeout(() => { t.style.opacity = 0; setTimeout(() => t.remove(), 200) }, 2000);
+        }
+    </script>
+    <script>
+        // --- AFFECTIVE EMOTION ENGINE ---
+        let faceMesh;
+        let emotionCamera;
+        let emotionActive = false;
+        let emotionCanvasElement;
+        let emotionCanvasCtx;
+        let confusionFrames = 0;
+        let isExplaining = false;
+
+        function toggleEmotion() {
+            if (focusActive || gestureActive) {
+                alert("⚠️ Conflict: Please disable Focus Guard and Telekinesis first.\nThey all fight for the camera stream!");
+                return;
+            }
+            emotionActive = !emotionActive;
+            document.getElementById('emotion-canvas').style.display = emotionActive ? 'block' : 'none';
+
+            if (emotionActive) startEmotion();
+            else stopEmotion();
+        }
+
+        function startEmotion() {
+            if (!faceMesh) {
+                emotionCanvasElement = document.getElementById('emotion-canvas');
+                emotionCanvasCtx = emotionCanvasElement.getContext('2d');
+
+                faceMesh = new FaceMesh({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                    }
+                });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onEmotionResults);
+            }
+
+            if (!emotionCamera) {
+                const camVideo = document.createElement('video');
+                camVideo.style.display = "none";
+                document.body.appendChild(camVideo);
+
+                emotionCamera = new Camera(camVideo, {
+                    onFrame: async () => {
+                        if (emotionActive) await faceMesh.send({ image: camVideo });
+                    },
+                    width: 320,
+                    height: 240
+                });
+                emotionCamera.start();
+            }
+        }
+
+        function stopEmotion() {
+            if (emotionCamera) {
+                emotionCamera.stop();
+                emotionCamera = null;
+            }
+            emotionActive = false;
+            document.getElementById('emotion-canvas').style.display = 'none';
+        }
+
+        function onEmotionResults(results) {
+            if (!emotionActive || isExplaining) return;
+
+            emotionCanvasCtx.save();
+            emotionCanvasCtx.clearRect(0, 0, emotionCanvasElement.width, emotionCanvasElement.height);
+            emotionCanvasCtx.drawImage(results.image, 0, 0, emotionCanvasElement.width, emotionCanvasElement.height);
+
+            if (results.multiFaceLandmarks) {
+                for (const landmarks of results.multiFaceLandmarks) {
+                    drawConnectors(emotionCanvasCtx, landmarks, FACEMESH_TESSELATION, { color: '#FB7185', lineWidth: 0.5 });
+
+                    // Simple Furrowed Brow Detection (Squint + Brow drop)
+                    // Inner eyebrows: 105, 334. Nose bridge: 8
+                    // Distance between eyebrows relative to face width
+                    const leftBrow = landmarks[105];
+                    const rightBrow = landmarks[334];
+                    const nose = landmarks[8];
+                    const leftFace = landmarks[234];
+                    const rightFace = landmarks[454];
+
+                    // Euclidean distances
+                    const faceWidth = Math.sqrt(Math.pow(rightFace.x - leftFace.x, 2) + Math.pow(rightFace.y - leftFace.y, 2));
+                    const browDistance = Math.sqrt(Math.pow(rightBrow.x - leftBrow.x, 2) + Math.pow(rightBrow.y - leftBrow.y, 2));
+
+                    // Ratio: brow distance vs face width
+                    const ratio = browDistance / faceWidth;
+
+                    // Typical ratio is ~0.20 to 0.25. When furrowing, it drops below ~0.17
+                    emotionCanvasCtx.fillStyle = "white";
+                    emotionCanvasCtx.font = "20px Arial";
+                    emotionCanvasCtx.fillText(`Brow Ratio: ${ratio.toFixed(3)}`, 10, 20);
+
+                    if (ratio < 0.175) {
+                        confusionFrames++;
+                        emotionCanvasCtx.fillStyle = "red";
+                        emotionCanvasCtx.fillText(`CONFUSION DETECTED! (${confusionFrames})`, 10, 50);
+
+                        if (confusionFrames > 30) { // Approx 1 second of solid furrowing
+                            triggerExplanation();
+                        }
+                    } else {
+                        confusionFrames = Math.max(0, confusionFrames - 2); // Quick decay
+                    }
+                }
+            }
+            emotionCanvasCtx.restore();
+        }
+
+        async function triggerExplanation() {
+            isExplaining = true;
+            confusionFrames = 0;
+            const vid = document.getElementById('vid');
+            vid.pause();
+
+            showToast("🧠 CONFUSION DETECTED");
+
+            const c = document.getElementById('chat');
+            c.innerHTML += `<div class="bubble ai" style="color:var(--red);">Analyzing facial expressions... High Cognitive Load detected. Asking AI for an explanation...</div>`;
+            c.scrollTop = c.scrollHeight;
+
+            try {
+                const r = await fetch('/explain_context', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ timestamp: vid.currentTime })
+                });
+                const d = await r.json();
+                c.innerHTML += `<div class="bubble ai" style="border: 1px solid var(--red); box-shadow: 0 0 10px var(--red);">${d.explanation.replace(/\n/g, '<br>')}</div>`;
+            } catch (e) {
+                c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`;
+            }
+            c.scrollTop = c.scrollHeight;
+
+            // Allow triggering again after 10 seconds
+            setTimeout(() => { isExplaining = false; }, 10000);
+        }
+    </script>
+    <script>
+        // --- CEREBRAL HERTZ (BINAURAL BEATS) ---
+        let audioCtx;
+        let oscL, oscR, gainNode;
+        const BASE_FREQ = 200; // Comfortable base tone
+
+        function toggleBinaural() {
+            const p = document.getElementById('binaural-panel');
+            p.style.display = (p.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                gainNode = audioCtx.createGain();
+                gainNode.connect(audioCtx.destination);
+                gainNode.gain.value = 0.1;
+                console.log("Audio Context Init");
+            }
+        }
+
+        function setWave(type) {
+            initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // Stop existing
+            if (oscL) { try { oscL.stop(); oscR.stop(); } catch (e) { } }
+            oscL = null; oscR = null;
+
+            if (type === 'off') return;
+
+            let beat = 0;
+            if (type === 'alpha') beat = 10;
+            if (type === 'theta') beat = 6;
+            if (type === 'gamma') beat = 40;
+
+            // Create oscillators
+            oscL = audioCtx.createOscillator();
+            oscR = audioCtx.createOscillator();
+
+            // Pan
+            const panL = audioCtx.createStereoPanner();
+            const panR = audioCtx.createStereoPanner();
+            panL.pan.value = -1; // Left
+            panR.pan.value = 1;  // Right
+
+            oscL.frequency.value = BASE_FREQ;
+            oscR.frequency.value = BASE_FREQ + beat;
+
+            oscL.connect(panL); panL.connect(gainNode);
+            oscR.connect(panR); panR.connect(gainNode);
+
+            oscL.start();
+            oscR.start();
+
+            // UI Feedback
+            document.querySelectorAll('.hz-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function setVol(v) {
+            if (gainNode) gainNode.gain.value = v;
+        }
+    </script>
+</body>
+
+</html>

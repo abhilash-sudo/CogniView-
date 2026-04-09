@@ -1,0 +1,16 @@
+# Secrets
+.env
+__pycache__/
+*.pyc
+
+# Database
+*.db
+chroma_db/
+
+# Media
+static/uploaded_video.mp4
+static/audio/
+static/slides/
+static/reports/
+video_*.mp4
+*.part

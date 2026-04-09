@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CogniView | Neural Interface</title>
+    <style>
+        /* --- MIDNIGHT CYBERPUNK THEME --- */
+        :root {
+            --bg: #0B0E14;
+            /* Deep Void Blue */
+            --card-bg: rgba(30, 41, 59, 0.7);
+            /* Translucent Glass */
+            --text-primary: #F8FAFC;
+            /* Ice White */
+            --text-secondary: #94A3B8;
+            /* Slate */
+            --accent: #06B6D4;
+            /* Cyber Cyan */
+            --accent-glow: 0 0 20px rgba(6, 182, 212, 0.5);
+            --border: rgba(148, 163, 184, 0.1);
+            --radius: 16px;
+        }
+
+        body {
+            background: var(--bg);
+            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, var(--bg) 60%);
+            font-family: 'Outfit', 'Inter', sans-serif;
+            /* Futuristic Font */
+            color: var(--text-primary);
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(to right, #06B6D4, #3B82F6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            text-shadow: 0 0 30px rgba(6, 182, 212, 0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 4rem;
+            font-size: 1.25rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* GLASS CARDS */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(12px);
+            padding: 2.5rem;
+            margin-bottom: 2.5rem;
+            width: 100%;
+            max-width: 800px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.1);
+            border-color: rgba(6, 182, 212, 0.3);
+        }
+
+        /* INPUTS */
+        .input-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-field {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+        }
+
+        /* BUTTONS */
+        .btn {
+            background: var(--accent);
+            color: #0B0E14;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: var(--accent-glow);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.8);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-outline:hover {
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        /* UPLOAD ZONE */
+        .upload-zone {
+            text-align: center;
+            border: 2px dashed rgba(148, 163, 184, 0.2);
+            padding: 3rem;
+            border-radius: var(--radius);
+            transition: 0.2s;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent);
+            background: rgba(6, 182, 212, 0.05);
+        }
+
+        .divider {
+            margin: 2rem 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        /* GRID */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .video-item {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: 0.2s;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(5px);
+        }
+
+        .video-item:hover {
+            transform: translateY(-5px);
+            background: rgba(30, 41, 59, 0.8);
+            border-color: var(--accent);
+            box-shadow: var(--accent-glow);
+        }
+
+        .vid-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+
+        .vid-date {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal {
+            background: #1e293b;
+            border: 1px solid var(--accent);
+            padding: 3rem;
+            border-radius: 24px;
+            text-align: center;
+            width: 450px;
+            box-shadow: 0 0 50px rgba(6, 182, 212, 0.2);
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            margin: 0 auto 2rem;
+            animation: spin 1s linear infinite;
+            box-shadow: var(--accent-glow);
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .status-txt {
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+
+        .help-txt {
+            color: var(--accent);
+            font-size: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <div style="width: 100%; max-width: 900px; display: flex; flex-direction: column; align-items: center;">
+        <h1>COGNIVIEW</h1>
+        <div class="subtitle">Neural Knowledge Interface</div>
+
+        <!-- SEARCH -->
+        <div class="card">
+            <h3
+                style="margin-top:0; color: var(--accent); text-transform: uppercase; font-size: 0.9rem; margin-bottom: 1rem;">
+                Hive Mind Query</h3>
+            <div class="input-group">
+                <input type="text" id="hiveInp" class="input-field"
+                    placeholder="Ask the Hive Mind (e.g., 'Explain Quantum Mechanics')...">
+                <button class="btn" onclick="askHive()">Search</button>
+            </div>
+            <div id="hiveRes"
+                style="margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,0,0,0.3); border-radius: 12px; display: none; line-height: 1.7; border-left: 3px solid var(--accent);">
+            </div>
+        </div>
+
+        <!-- UPLOAD -->
+        <div class="card">
+            <h3
+                style="margin-top:0; color: var(--accent); text-transform: uppercase; font-size: 0.9rem; margin-bottom: 1rem;">
+                Ingest Data</h3>
+            <div class="upload-zone">
+                <div class="input-group" style="max-width: 600px; margin: 0 auto;">
+                    <input type="text" id="ytUrl" class="input-field" placeholder="Paste YouTube URL...">
+                    <button class="btn" onclick="startUpload('yt')">Process</button>
+                </div>
+
+                <div class="divider">OR UPLOAD LOCAL FILE</div>
+
+                <input type="file" id="fileInp" style="display: none" onchange="startUpload('file')">
+                <button class="btn-outline" onclick="document.getElementById('fileInp').click()">
+                    Select Video File
+                </button>
+            </div>
+        </div>
+
+        <!-- LIBRARY -->
+        <h3 style="align-self: flex-start; margin-left: 10px; color: var(--text-secondary); text-transform: uppercase;">
+            Memory Banks</h3>
+        <div class="grid">
+            {% for video in library %}
+            <a href="{{ url_for('load_video', video_id=video.id) }}" class="video-item">
+                <span class="vid-title">{{ video.title }}</span>
+                <span class="vid-date">{{ video.date_added }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div id="progressModal" class="modal-overlay">
+        <div class="modal">
+            <div class="spinner"></div>
+            <div id="pStatus" class="status-txt">SYSTEM ACTIVE</div>
+            <div class="help-txt">Processing Neural Data...</div>
+        </div>
+    </div>
+
+    <script>
+        async function startUpload(type) {
+            const formData = new FormData();
+
+            if (type === 'yt') {
+                const url = document.getElementById('ytUrl').value.trim();
+                if (!url) return;
+                formData.append('youtube_url', url);
+            } else {
+                const file = document.getElementById('fileInp').files[0];
+                if (!file) return;
+                formData.append('video', file);
+            }
+
+            const modal = document.getElementById('progressModal');
+            const statusTxt = document.getElementById('pStatus');
+            modal.style.display = 'flex';
+            statusTxt.textContent = "INITIALIZING...";
+
+            try {
+                const res = await fetch('/process', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert("Error: " + data.error);
+                    modal.style.display = 'none';
+                    return;
+                }
+
+                const taskId = data.task_id;
+                const pollInterval = setInterval(async () => {
+                    const sRes = await fetch(`/status/${taskId}`);
+                    const sData = await sRes.json();
+
+                    statusTxt.textContent = sData.status.toUpperCase();
+
+                    if (sData.status === "Completed") {
+                        clearInterval(pollInterval);
+                        window.location.href = `/load/${sData.video_id}`;
+                    } else if (sData.status.startsWith("Error")) {
+                        clearInterval(pollInterval);
+                        alert(sData.status);
+                        modal.style.display = 'none';
+                    }
+                }, 1000);
+
+            } catch (e) {
+                alert("Upload Failed: " + e);
+                modal.style.display = 'none';
+            }
+        }
+
+        async function askHive() {
+            const inp = document.getElementById('hiveInp');
+            const res = document.getElementById('hiveRes');
+            const txt = inp.value.trim();
+            if (!txt) return;
+
+            res.style.display = "block";
+            res.innerHTML = "Thinking...";
+
+            try {
+                const r = await fetch('/global_chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: txt })
+                });
+                const d = await r.json();
+                res.innerHTML = d.response.replace(/\n/g, '<br>');
+            } catch (e) {
+                res.innerHTML = "Connection Error.";
+            }
+        }
+    </script>
+</body>
+
+</html>
