@@ -1,6 +1,7 @@
 import sqlite3
 import json
 from datetime import datetime
+from contextlib import contextmanager
 import chromadb
 from sentence_transformers import SentenceTransformer
 from config import DB_FILE, CHROMA_DB_PATH
@@ -12,90 +13,90 @@ vector_collection = chroma_client.get_or_create_collection(name="video_knowledge
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2') 
 
 # --- SQLITE DATABASE ---
-def init_db():
+@contextmanager
+def get_conn(row_factory=False):
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS videos
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, filename TEXT, 
-                  transcript TEXT, slides TEXT, ocr_text TEXT, date_added TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS notes
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, 
-                  timestamp INTEGER, text TEXT, created_at TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS concepts
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, 
-                  concept TEXT, UNIQUE(video_id, concept))''')
-    conn.commit()
-    conn.close()
+    if row_factory:
+        conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def init_db():
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS videos
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, filename TEXT, 
+                    transcript TEXT, slides TEXT, ocr_text TEXT, date_added TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS notes
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, 
+                    timestamp INTEGER, text TEXT, created_at TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS concepts
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, 
+                    concept TEXT, UNIQUE(video_id, concept))''')
+        conn.commit()
 
 def save_concepts(video_id, concepts):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    for concept in concepts:
-        try:
-            c.execute("INSERT OR IGNORE INTO concepts (video_id, concept) VALUES (?, ?)", (video_id, concept))
-        except: pass
-    conn.commit()
-    conn.close()
+    with get_conn() as conn:
+        c = conn.cursor()
+        for concept in concepts:
+            try:
+                c.execute("INSERT OR IGNORE INTO concepts (video_id, concept) VALUES (?, ?)", (video_id, concept))
+            except: pass
+        conn.commit()
 
 def get_graph_data():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    # Nodes: Videos (Type 1) and Concepts (Type 2)
-    c.execute("SELECT id, title FROM videos")
-    videos = c.fetchall()
-    
-    c.execute("SELECT DISTINCT concept FROM concepts")
-    concepts = c.fetchall()
-    
-    nodes = []
-    edges = []
-    
-    # Video Nodes
-    for v in videos:
-        nodes.append({"id": f"v_{v['id']}", "label": v['title'], "group": "video", "value": 20})
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        # Nodes: Videos (Type 1) and Concepts (Type 2)
+        c.execute("SELECT id, title FROM videos")
+        videos = c.fetchall()
         
-    # Concept Nodes
-    for con in concepts:
-        c_id = f"c_{con['concept']}"
-        nodes.append({"id": c_id, "label": con['concept'], "group": "concept", "value": 10})
+        c.execute("SELECT DISTINCT concept FROM concepts")
+        concepts = c.fetchall()
         
-    # Edges (Connections)
-    c.execute("SELECT video_id, concept FROM concepts")
-    links = c.fetchall()
-    for l in links:
-        edges.append({"from": f"v_{l['video_id']}", "to": f"c_{l['concept']}"})
+        nodes = []
+        edges = []
         
-    conn.close()
-    return {"nodes": nodes, "edges": edges}
+        # Video Nodes
+        for v in videos:
+            nodes.append({"id": f"v_{v['id']}", "label": v['title'], "group": "video", "value": 20})
+            
+        # Concept Nodes
+        for con in concepts:
+            c_id = f"c_{con['concept']}"
+            nodes.append({"id": c_id, "label": con['concept'], "group": "concept", "value": 10})
+            
+        # Edges (Connections)
+        c.execute("SELECT video_id, concept FROM concepts")
+        links = c.fetchall()
+        for l in links:
+            edges.append({"from": f"v_{l['video_id']}", "to": f"c_{l['concept']}"})
+        
+        return {"nodes": nodes, "edges": edges}
 
 def save_to_db(title, filename, transcript, slides, ocr_text):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT INTO videos (title, filename, transcript, slides, ocr_text, date_added) VALUES (?, ?, ?, ?, ?, ?)",
-              (title, filename, transcript, json.dumps(slides), ocr_text, datetime.now().strftime("%Y-%m-%d %H:%M")))
-    conn.commit()
-    vid = c.lastrowid
-    conn.close()
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO videos (title, filename, transcript, slides, ocr_text, date_added) VALUES (?, ?, ?, ?, ?, ?)",
+                (title, filename, transcript, json.dumps(slides), ocr_text, datetime.now().strftime("%Y-%m-%d %H:%M")))
+        conn.commit()
+        vid = c.lastrowid
     return vid
 
 def get_latest_video():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM videos ORDER BY id DESC LIMIT 1")
-    video = c.fetchone()
-    conn.close()
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("SELECT * FROM videos ORDER BY id DESC LIMIT 1")
+        video = c.fetchone()
     return video
 
 def get_video_by_id(video_id):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
-    video = c.fetchone()
-    conn.close()
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+        video = c.fetchone()
     return video
 
 def vectorize_and_store(video_id, title, text):

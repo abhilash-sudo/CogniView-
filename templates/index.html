@@ -1,326 +1,429 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CogniView | Neural Interface</title>
+    <title>CogniView | Neural Knowledge Interface</title>
+    <meta name="description" content="CogniView — AI-powered video learning platform with mind maps, emotion tracking, and neural Q&A.">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        /* --- MIDNIGHT CYBERPUNK THEME --- */
         :root {
-            --bg: #0B0E14;
-            /* Deep Void Blue */
-            --card-bg: rgba(30, 41, 59, 0.7);
-            /* Translucent Glass */
-            --text-primary: #F8FAFC;
-            /* Ice White */
+            --bg: #060811;
+            --card-bg: rgba(15, 23, 42, 0.7);
+            --text-primary: #F1F5F9;
             --text-secondary: #94A3B8;
-            /* Slate */
             --accent: #06B6D4;
-            /* Cyber Cyan */
-            --accent-glow: 0 0 20px rgba(6, 182, 212, 0.5);
+            --accent2: #A855F7;
+            --accent3: #F97316;
             --border: rgba(148, 163, 184, 0.1);
-            --radius: 16px;
+            --glow-cyan: 0 0 40px rgba(6, 182, 212, 0.35);
+            --glow-purple: 0 0 40px rgba(168, 85, 247, 0.35);
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             background: var(--bg);
-            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, var(--bg) 60%);
-            font-family: 'Outfit', 'Inter', sans-serif;
-            /* Futuristic Font */
+            font-family: 'Outfit', sans-serif;
             color: var(--text-primary);
             min-height: 100vh;
-            margin: 0;
-            padding: 40px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            overflow-x: hidden;
         }
 
-        h1 {
-            font-size: 3rem;
-            font-weight: 800;
-            margin: 0 0 0.5rem 0;
-            background: linear-gradient(to right, #06B6D4, #3B82F6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-align: center;
-            text-shadow: 0 0 30px rgba(6, 182, 212, 0.3);
+        /* ── ANIMATED BACKGROUND ─────────────────────────── */
+        .bg-grid {
+            position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(6,182,212,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(6,182,212,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: gridMove 20s linear infinite;
+        }
+        @keyframes gridMove { to { background-position: 60px 60px; } }
+
+        .orb {
+            position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0;
+        }
+        .orb-1 { width: 600px; height: 600px; background: rgba(6,182,212,0.12); top: -200px; left: -200px; animation: float1 8s ease-in-out infinite; }
+        .orb-2 { width: 500px; height: 500px; background: rgba(168,85,247,0.1); bottom: -150px; right: -150px; animation: float2 10s ease-in-out infinite; }
+        .orb-3 { width: 300px; height: 300px; background: rgba(249,115,22,0.08); top: 50%; left: 50%; transform: translate(-50%,-50%); animation: float3 12s ease-in-out infinite; }
+        @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,40px)} }
+        @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,-30px)} }
+        @keyframes float3 { 0%,100%{transform:translate(-50%,-50%) scale(1)} 50%{transform:translate(-50%,-50%) scale(1.2)} }
+
+        /* ── LAYOUT ──────────────────────────────────────── */
+        .page { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+        /* ── NAVBAR ──────────────────────────────────────── */
+        nav {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 0; margin-bottom: 60px;
+            border-bottom: 1px solid var(--border);
+        }
+        .logo {
+            font-size: 1.4rem; font-weight: 800; letter-spacing: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .nav-badge {
+            background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3);
+            color: var(--accent); padding: 6px 14px; border-radius: 20px;
+            font-size: 0.8rem; font-weight: 600; letter-spacing: 1px;
         }
 
-        .subtitle {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-bottom: 4rem;
-            font-size: 1.25rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+        /* ── HERO ────────────────────────────────────────── */
+        .hero { text-align: center; margin-bottom: 70px; }
+        .hero-tag {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(168,85,247,0.15));
+            border: 1px solid rgba(6,182,212,0.3);
+            color: var(--accent); padding: 8px 20px; border-radius: 30px;
+            font-size: 0.85rem; font-weight: 600; letter-spacing: 2px;
+            text-transform: uppercase; margin-bottom: 30px;
+            animation: fadeInDown 0.5s ease;
         }
+        .hero h1 {
+            font-size: clamp(2.8rem, 6vw, 4.5rem); font-weight: 900; line-height: 1.1;
+            margin-bottom: 24px; letter-spacing: -1px;
+            animation: fadeInUp 0.6s ease 0.1s both;
+        }
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.15rem; color: var(--text-secondary); max-width: 560px;
+            margin: 0 auto 40px; line-height: 1.7;
+            animation: fadeInUp 0.6s ease 0.2s both;
+        }
+        .hero-features {
+            display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+            animation: fadeInUp 0.6s ease 0.3s both;
+        }
+        .hero-feat {
+            display: flex; align-items: center; gap: 8px;
+            color: var(--text-secondary); font-size: 0.9rem;
+        }
+        .hero-feat span { color: var(--accent); }
 
-        /* GLASS CARDS */
+        @keyframes fadeInDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:none} }
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+
+        /* ── GLASS CARD ──────────────────────────────────── */
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            backdrop-filter: blur(12px);
-            padding: 2.5rem;
-            margin-bottom: 2.5rem;
-            width: 100%;
-            max-width: 800px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 20px;
+            backdrop-filter: blur(20px);
+            padding: 2rem 2.5rem;
+            margin-bottom: 2rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .card:hover { border-color: rgba(6,182,212,0.3); box-shadow: var(--glow-cyan); }
+
+        .section-label {
+            font-size: 0.75rem; font-weight: 700; letter-spacing: 3px;
+            text-transform: uppercase; color: var(--accent); margin-bottom: 1.2rem;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-label::after {
+            content: ''; flex: 1; height: 1px; background: var(--border);
         }
 
-        .card:hover {
-            box-shadow: 0 0 30px rgba(6, 182, 212, 0.1);
-            border-color: rgba(6, 182, 212, 0.3);
+        /* ── HIVE MIND SEARCH ────────────────────────────── */
+        .search-wrap { position: relative; }
+        .search-wrap input {
+            width: 100%; background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border); color: white;
+            padding: 16px 120px 16px 20px; border-radius: 14px;
+            font-size: 1rem; font-family: 'Outfit', sans-serif; outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(6,182,212,0.15); }
+        .search-wrap input::placeholder { color: #475569; }
+        .search-btn {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            background: linear-gradient(135deg, var(--accent), #0891b2);
+            border: none; color: #060811; padding: 10px 22px; border-radius: 10px;
+            font-weight: 700; font-family: 'Outfit', sans-serif; cursor: pointer;
+            transition: 0.2s; font-size: 0.9rem; letter-spacing: 0.5px;
+        }
+        .search-btn:hover { transform: translateY(-50%) scale(1.04); box-shadow: var(--glow-cyan); }
+        #hiveRes {
+            margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,0,0,0.3);
+            border-radius: 12px; display: none; line-height: 1.8;
+            border-left: 3px solid var(--accent); color: var(--text-primary);
+            font-size: 0.95rem;
         }
 
-        /* INPUTS */
-        .input-group {
-            display: flex;
-            gap: 12px;
+        /* ── UPLOAD ──────────────────────────────────────── */
+        .upload-tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; }
+        .upload-tab {
+            padding: 8px 18px; border-radius: 10px; border: 1px solid var(--border);
+            background: rgba(255,255,255,0.03); color: var(--text-secondary);
+            font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: 0.2s;
+            font-family: 'Outfit', sans-serif;
         }
-
-        .input-field {
-            flex: 1;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid var(--border);
-            color: white;
-            padding: 1rem 1.25rem;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            outline: none;
-            transition: 0.2s;
+        .upload-tab.active, .upload-tab:hover {
+            background: rgba(6,182,212,0.1); border-color: rgba(6,182,212,0.4); color: var(--accent);
         }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
 
-        .input-field:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+        .yt-input-wrap { display: flex; gap: 12px; }
+        .yt-input-wrap input {
+            flex: 1; background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border); color: white;
+            padding: 14px 18px; border-radius: 12px;
+            font-size: 1rem; font-family: 'Outfit', sans-serif; outline: none; transition: 0.2s;
         }
+        .yt-input-wrap input:focus { border-color: #FF0000; box-shadow: 0 0 0 3px rgba(255,0,0,0.1); }
+        .yt-input-wrap input::placeholder { color: #475569; }
 
-        /* BUTTONS */
+        .drop-zone {
+            border: 2px dashed rgba(168,85,247,0.3); border-radius: 16px;
+            padding: 48px; text-align: center; cursor: pointer;
+            transition: 0.2s; position: relative;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent2); background: rgba(168,85,247,0.05);
+        }
+        .drop-zone .drop-icon { font-size: 3rem; margin-bottom: 12px; }
+        .drop-zone p { color: var(--text-secondary); font-size: 1rem; }
+        .drop-zone strong { color: var(--accent2); }
+        #fileInp { display: none; }
+
         .btn {
-            background: var(--accent);
-            color: #0B0E14;
-            border: none;
-            padding: 1rem 2rem;
-            border-radius: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            box-shadow: var(--accent-glow);
+            background: linear-gradient(135deg, var(--accent), #0891b2);
+            border: none; color: #060811; padding: 14px 28px;
+            border-radius: 12px; font-weight: 700; font-family: 'Outfit', sans-serif;
+            cursor: pointer; transition: 0.2s; font-size: 0.95rem; letter-spacing: 0.5px;
+            white-space: nowrap;
         }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 0 30px rgba(6, 182, 212, 0.8);
+        .btn:hover { transform: translateY(-2px); box-shadow: var(--glow-cyan); }
+        .btn-purple {
+            background: linear-gradient(135deg, var(--accent2), #7C3AED);
         }
+        .btn-purple:hover { box-shadow: var(--glow-purple); }
 
-        .btn-outline {
-            background: transparent;
-            color: var(--accent);
-            border: 1px solid var(--accent);
-            padding: 0.75rem 1.5rem;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.2s;
+        /* ── LIBRARY ─────────────────────────────────────── */
+        .library-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px; margin-top: 1.5rem;
         }
-
-        .btn-outline:hover {
-            background: rgba(6, 182, 212, 0.1);
+        .vid-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border); border-radius: 16px;
+            padding: 1.4rem; text-decoration: none; color: inherit;
+            transition: 0.25s; display: flex; flex-direction: column; gap: 10px;
         }
-
-        /* UPLOAD ZONE */
-        .upload-zone {
-            text-align: center;
-            border: 2px dashed rgba(148, 163, 184, 0.2);
-            padding: 3rem;
-            border-radius: var(--radius);
-            transition: 0.2s;
+        .vid-card:hover {
+            transform: translateY(-4px); border-color: rgba(6,182,212,0.4);
+            background: rgba(15, 23, 42, 0.8); box-shadow: var(--glow-cyan);
         }
-
-        .upload-zone:hover {
-            border-color: var(--accent);
-            background: rgba(6, 182, 212, 0.05);
-        }
-
-        .divider {
-            margin: 2rem 0;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-
-        /* GRID */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-            max-width: 900px;
-        }
-
-        .video-item {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            text-decoration: none;
-            color: inherit;
-            transition: 0.2s;
-            display: flex;
-            flex-direction: column;
-            backdrop-filter: blur(5px);
-        }
-
-        .video-item:hover {
-            transform: translateY(-5px);
-            background: rgba(30, 41, 59, 0.8);
-            border-color: var(--accent);
-            box-shadow: var(--accent-glow);
-        }
-
-        .vid-title {
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            color: white;
-        }
-
-        .vid-date {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-
-        /* MODAL */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
-
-        .modal {
-            background: #1e293b;
-            border: 1px solid var(--accent);
-            padding: 3rem;
-            border-radius: 24px;
-            text-align: center;
-            width: 450px;
-            box-shadow: 0 0 50px rgba(6, 182, 212, 0.2);
-        }
-
-        .spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            margin: 0 auto 2rem;
-            animation: spin 1s linear infinite;
-            box-shadow: var(--accent-glow);
-        }
-
-        @keyframes spin {
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .status-txt {
-            font-weight: 700;
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-            color: white;
-        }
-
-        .help-txt {
-            color: var(--accent);
+        .vid-num {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: linear-gradient(135deg, rgba(6,182,212,0.2), rgba(168,85,247,0.2));
+            border: 1px solid rgba(6,182,212,0.2);
+            display: flex; align-items: center; justify-content: center;
             font-size: 1rem;
         }
+        .vid-title { font-weight: 700; font-size: 0.95rem; color: white; line-height: 1.4; }
+        .vid-meta { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+        .vid-arrow { color: var(--accent); font-size: 0.8rem; margin-top: auto; font-weight: 600; }
 
-        .hidden {
-            display: none;
+        .empty-state {
+            text-align: center; padding: 40px; color: var(--text-secondary);
+            border: 1px dashed var(--border); border-radius: 16px; margin-top: 1rem;
         }
+        .empty-state .e-icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+        /* ── FEATURES STRIP ──────────────────────────────── */
+        .features-strip {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px; margin-bottom: 2rem;
+        }
+        .feat-chip {
+            background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border);
+            border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+            transition: 0.2s;
+        }
+        .feat-chip:hover { border-color: var(--border); background: rgba(15,23,42,0.9); }
+        .feat-chip .icon { font-size: 1.5rem; }
+        .feat-chip .name { font-weight: 700; font-size: 0.85rem; color: var(--text-primary); }
+        .feat-chip .desc { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; }
+
+        /* ── MODAL ───────────────────────────────────────── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(12px); display: none;
+            align-items: center; justify-content: center; z-index: 200;
+        }
+        .modal {
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            border: 1px solid rgba(6,182,212,0.3);
+            padding: 3rem; border-radius: 24px; text-align: center;
+            width: 420px; box-shadow: 0 0 80px rgba(6,182,212,0.15);
+        }
+        .spinner-ring {
+            width: 64px; height: 64px; border: 4px solid rgba(255,255,255,0.08);
+            border-top-color: var(--accent); border-radius: 50%;
+            margin: 0 auto 24px; animation: spin 1s linear infinite;
+            box-shadow: var(--glow-cyan);
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .status-txt { font-weight: 800; font-size: 1.4rem; margin-bottom: 8px; color: white; }
+        .help-txt { color: var(--accent); font-size: 0.95rem; }
+        .progress-bar-wrap {
+            width: 100%; height: 4px; background: rgba(255,255,255,0.08);
+            border-radius: 2px; margin-top: 20px; overflow: hidden;
+        }
+        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s; border-radius: 2px; animation: pulse-bar 2s ease-in-out infinite; }
+        @keyframes pulse-bar { 0%,100%{opacity:1} 50%{opacity:0.6} }
+        .hidden { display: none !important; }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
 </head>
-
 <body>
+    <canvas id="neural-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></canvas>
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
 
-    <div style="width: 100%; max-width: 900px; display: flex; flex-direction: column; align-items: center;">
-        <h1>COGNIVIEW</h1>
-        <div class="subtitle">Neural Knowledge Interface</div>
+    <div class="page">
+        <nav>
+            <div class="logo">COGNIVIEW</div>
+            <div style="display:flex;gap:12px;align-items:center;">
+                <div id="stat-count" style="color:var(--text-secondary);font-size:0.82rem;">📚 Loading library...</div>
+                <div class="nav-badge">⚡ NEURAL v2.0</div>
+            </div>
+        </nav>
 
-        <!-- SEARCH -->
+        <!-- HERO -->
+        <div class="hero">
+            <div class="hero-tag">🧠 AI-Powered Learning</div>
+            <h1>Learn Smarter.<br><span>Think Deeper.</span></h1>
+            <p>Upload any lecture video. CogniView extracts knowledge, builds mind maps, tracks your focus, detects confusion — and teaches you like an AI tutor.</p>
+            <div class="hero-features">
+                <div class="hero-feat"><span>🧠</span> Neural Mind Maps</div>
+                <div class="hero-feat"><span>👁️</span> Eye Tracking</div>
+                <div class="hero-feat"><span>🎭</span> Emotion AI</div>
+                <div class="hero-feat"><span>🎙️</span> AI Podcast</div>
+                <div class="hero-feat"><span>⚡</span> Speed Reading</div>
+            </div>
+        </div>
+
+        <!-- FEATURES STRIP -->
+        <div class="features-strip">
+            <div class="feat-chip">
+                <div class="icon">🗺️</div>
+                <div class="name">Neural Mind Maps</div>
+                <div class="desc">Interactive force-directed knowledge graphs built from your lecture</div>
+            </div>
+            <div class="feat-chip">
+                <div class="icon">👁️</div>
+                <div class="name">Focus Guard</div>
+                <div class="desc">Eye tracking pauses video when you look away</div>
+            </div>
+            <div class="feat-chip">
+                <div class="icon">🎭</div>
+                <div class="name">Emotion Engine</div>
+                <div class="desc">Detects confusion and auto-explains the current topic</div>
+            </div>
+            <div class="feat-chip">
+                <div class="icon">🤖</div>
+                <div class="name">AI Tutor Chat</div>
+                <div class="desc">Ask anything about the video. Timestamped context-aware answers</div>
+            </div>
+        </div>
+
+        <!-- HIVE MIND SEARCH -->
         <div class="card">
-            <h3
-                style="margin-top:0; color: var(--accent); text-transform: uppercase; font-size: 0.9rem; margin-bottom: 1rem;">
-                Hive Mind Query</h3>
-            <div class="input-group">
-                <input type="text" id="hiveInp" class="input-field"
-                    placeholder="Ask the Hive Mind (e.g., 'Explain Quantum Mechanics')...">
-                <button class="btn" onclick="askHive()">Search</button>
+            <div class="section-label">🌐 Hive Mind Query</div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">Ask a question across your entire video library using semantic search.</p>
+            <div class="search-wrap">
+                <input type="text" id="hiveInp" placeholder="Ask anything across all your videos..." onkeypress="if(event.key==='Enter') askHive()">
+                <button class="search-btn" onclick="askHive()">Search</button>
             </div>
-            <div id="hiveRes"
-                style="margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,0,0,0.3); border-radius: 12px; display: none; line-height: 1.7; border-left: 3px solid var(--accent);">
-            </div>
+            <div id="hiveRes"></div>
         </div>
 
         <!-- UPLOAD -->
         <div class="card">
-            <h3
-                style="margin-top:0; color: var(--accent); text-transform: uppercase; font-size: 0.9rem; margin-bottom: 1rem;">
-                Ingest Data</h3>
-            <div class="upload-zone">
-                <div class="input-group" style="max-width: 600px; margin: 0 auto;">
-                    <input type="text" id="ytUrl" class="input-field" placeholder="Paste YouTube URL...">
+            <div class="section-label">📡 Ingest New Knowledge</div>
+            <div class="upload-tabs">
+                <button class="upload-tab active" onclick="switchTab('yt', this)">▶️ YouTube URL</button>
+                <button class="upload-tab" onclick="switchTab('file', this)">📁 Local Video</button>
+            </div>
+
+            <div id="tab-yt" class="tab-panel active">
+                <div class="yt-input-wrap">
+                    <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
                     <button class="btn" onclick="startUpload('yt')">Process</button>
                 </div>
+            </div>
 
-                <div class="divider">OR UPLOAD LOCAL FILE</div>
-
-                <input type="file" id="fileInp" style="display: none" onchange="startUpload('file')">
-                <button class="btn-outline" onclick="document.getElementById('fileInp').click()">
-                    Select Video File
-                </button>
+            <div id="tab-file" class="tab-panel">
+                <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInp').click()" ondragover="handleDrag(event,true)" ondragleave="handleDrag(event,false)" ondrop="handleDrop(event)">
+                    <div class="drop-icon">🎬</div>
+                    <p><strong>Click to select</strong> or drag & drop a video file</p>
+                    <p style="font-size:0.8rem;margin-top:8px;color:#475569">MP4, MKV, MOV, AVI supported</p>
+                </div>
+                <input type="file" id="fileInp" accept="video/*" onchange="startUpload('file')">
             </div>
         </div>
 
         <!-- LIBRARY -->
-        <h3 style="align-self: flex-start; margin-left: 10px; color: var(--text-secondary); text-transform: uppercase;">
-            Memory Banks</h3>
-        <div class="grid">
+        <div class="section-label" style="margin-top:1rem">📚 Memory Banks</div>
+        <div class="library-grid">
             {% for video in library %}
-            <a href="{{ url_for('load_video', video_id=video.id) }}" class="video-item">
-                <span class="vid-title">{{ video.title }}</span>
-                <span class="vid-date">{{ video.date_added }}</span>
+            <a href="{{ url_for('load_video', video_id=video.id) }}" class="vid-card" id="vid-card-{{ video.id }}">
+                <div class="vid-num">🎓</div>
+                <div class="vid-title">{{ video.title }}</div>
+                <div class="vid-meta">📅 {{ video.date_added }}</div>
+                <div class="vid-arrow">Open Lecture →</div>
             </a>
+            {% else %}
+            <div class="empty-state" style="grid-column: 1/-1;">
+                <div class="e-icon">🧠</div>
+                <p>No videos ingested yet.</p>
+                <p style="font-size:0.85rem;margin-top:6px;">Upload a YouTube link or local video above to get started.</p>
+            </div>
             {% endfor %}
         </div>
     </div>
 
-    <!-- MODAL -->
+    <!-- PROGRESS MODAL -->
     <div id="progressModal" class="modal-overlay">
         <div class="modal">
-            <div class="spinner"></div>
-            <div id="pStatus" class="status-txt">SYSTEM ACTIVE</div>
-            <div class="help-txt">Processing Neural Data...</div>
+            <div class="spinner-ring"></div>
+            <div id="pStatus" class="status-txt">INITIALIZING...</div>
+            <div class="help-txt">CogniView is processing your lecture</div>
+            <div class="progress-bar-wrap"><div class="progress-bar" id="pBar"></div></div>
         </div>
     </div>
 
     <script>
+        function switchTab(tab, btn) {
+            document.querySelectorAll('.upload-tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        function handleDrag(e, over) {
+            e.preventDefault();
+            document.getElementById('dropZone').classList.toggle('dragover', over);
+        }
+        function handleDrop(e) {
+            e.preventDefault();
+            handleDrag(e, false);
+            const file = e.dataTransfer.files[0];
+            if (file) { document.getElementById('fileInp').files = e.dataTransfer.files; startUpload('file'); }
+        }
+
         async function startUpload(type) {
             const formData = new FormData();
-
             if (type === 'yt') {
                 const url = document.getElementById('ytUrl').value.trim();
                 if (!url) return;
@@ -334,37 +437,34 @@
             const modal = document.getElementById('progressModal');
             const statusTxt = document.getElementById('pStatus');
             modal.style.display = 'flex';
-            statusTxt.textContent = "INITIALIZING...";
+            statusTxt.textContent = 'INITIALIZING...';
 
             try {
                 const res = await fetch('/process', { method: 'POST', body: formData });
                 const data = await res.json();
-
-                if (data.error) {
-                    alert("Error: " + data.error);
-                    modal.style.display = 'none';
-                    return;
-                }
+                if (data.error) { alert('Error: ' + data.error); modal.style.display = 'none'; return; }
 
                 const taskId = data.task_id;
+                const steps = ['Downloading...','Transcribing Audio...','Analysing Visuals...','Vectorizing Knowledge...','Building Mind Map...'];
+                let stepIdx = 0;
                 const pollInterval = setInterval(async () => {
                     const sRes = await fetch(`/status/${taskId}`);
                     const sData = await sRes.json();
-
                     statusTxt.textContent = sData.status.toUpperCase();
-
-                    if (sData.status === "Completed") {
+                    document.getElementById('pBar').style.width = (sData.progress || Math.min(stepIdx * 20, 90)) + '%';
+                    stepIdx++;
+                    if (sData.status === 'Completed') {
                         clearInterval(pollInterval);
-                        window.location.href = `/load/${sData.video_id}`;
-                    } else if (sData.status.startsWith("Error")) {
+                        document.getElementById('pBar').style.width = '100%';
+                        setTimeout(() => window.location.href = `/load/${sData.video_id}`, 500);
+                    } else if (sData.status.startsWith('Error')) {
                         clearInterval(pollInterval);
                         alert(sData.status);
                         modal.style.display = 'none';
                     }
-                }, 1000);
-
+                }, 1200);
             } catch (e) {
-                alert("Upload Failed: " + e);
+                alert('Upload Failed: ' + e);
                 modal.style.display = 'none';
             }
         }
@@ -374,23 +474,113 @@
             const res = document.getElementById('hiveRes');
             const txt = inp.value.trim();
             if (!txt) return;
-
-            res.style.display = "block";
-            res.innerHTML = "Thinking...";
-
+            res.style.display = 'block';
+            res.innerHTML = '<span style="color:var(--accent)">🧠 Searching neural database...</span>';
             try {
                 const r = await fetch('/global_chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: txt })
                 });
                 const d = await r.json();
                 res.innerHTML = d.response.replace(/\n/g, '<br>');
-            } catch (e) {
-                res.innerHTML = "Connection Error.";
-            }
+            } catch (e) { res.innerHTML = '<span style="color:#FB7185">⚠️ Connection Error.</span>'; }
         }
+
+        // ── NEURAL NETWORK CANVAS ANIMATION ──────────────────────────────────
+        (function() {
+            const canvas = document.getElementById('neural-canvas');
+            const ctx = canvas.getContext('2d');
+            let W, H, nodes = [], mouse = {x: -999, y: -999};
+            const NODE_COUNT = 55, CONNECT_DIST = 160, MOUSE_DIST = 200;
+
+            function resize() {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            }
+
+            function Node() {
+                this.x = Math.random() * W;
+                this.y = Math.random() * H;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4;
+                this.r = Math.random() * 2.5 + 1;
+                this.pulse = Math.random() * Math.PI * 2;
+            }
+
+            function init() {
+                resize();
+                nodes = [];
+                for (let i = 0; i < NODE_COUNT; i++) nodes.push(new Node());
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                const t = Date.now() * 0.001;
+
+                nodes.forEach(n => {
+                    n.x += n.vx; n.y += n.vy;
+                    n.pulse += 0.02;
+                    if (n.x < 0 || n.x > W) n.vx *= -1;
+                    if (n.y < 0 || n.y > H) n.vy *= -1;
+
+                    // Mouse attraction
+                    const dx = mouse.x - n.x, dy = mouse.y - n.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < MOUSE_DIST) {
+                        const force = (MOUSE_DIST - dist) / MOUSE_DIST * 0.015;
+                        n.vx += dx * force; n.vy += dy * force;
+                        // Clamp speed
+                        const speed = Math.sqrt(n.vx*n.vx + n.vy*n.vy);
+                        if (speed > 2) { n.vx = n.vx/speed*2; n.vy = n.vy/speed*2; }
+                    }
+                });
+
+                // Draw edges
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i+1; j < nodes.length; j++) {
+                        const dx = nodes[j].x - nodes[i].x;
+                        const dy = nodes[j].y - nodes[i].y;
+                        const d = Math.sqrt(dx*dx + dy*dy);
+                        if (d < CONNECT_DIST) {
+                            const alpha = (1 - d/CONNECT_DIST) * 0.25;
+                            ctx.strokeStyle = `rgba(6,182,212,${alpha})`;
+                            ctx.lineWidth = 0.8;
+                            ctx.beginPath();
+                            ctx.moveTo(nodes[i].x, nodes[i].y);
+                            ctx.lineTo(nodes[j].x, nodes[j].y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                // Draw nodes
+                nodes.forEach(n => {
+                    const glow = 0.5 + 0.5 * Math.sin(n.pulse);
+                    const r = n.r * (1 + 0.3 * Math.sin(n.pulse));
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+                    ctx.fillStyle = `rgba(6,182,212,${0.4 + 0.4*glow})`;
+                    ctx.fill();
+                    // Outer glow ring
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, r*3, 0, Math.PI*2);
+                    ctx.fillStyle = `rgba(6,182,212,${0.04*glow})`;
+                    ctx.fill();
+                });
+
+                requestAnimationFrame(draw);
+            }
+
+            window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+            window.addEventListener('resize', init);
+            init();
+            draw();
+
+            // Update library count in nav
+            const cards = document.querySelectorAll('.vid-card');
+            const stat = document.getElementById('stat-count');
+            if (stat) stat.textContent = cards.length > 0 ? `📚 ${cards.length} lecture${cards.length>1?'s':''} stored` : '📚 No lectures yet';
+        })();
     </script>
 </body>
-
 </html>

@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import os
 import json
 import re
+import hashlib
 from datetime import datetime
 from gtts import gTTS
 from fpdf import FPDF
@@ -31,27 +32,34 @@ def clean_json_output(text):
         return "[]"
     except: return "[]"
 
+def api_ok(data=None, status=200):
+    return jsonify({"ok": True, "data": data, "error": None}), status
+
+def api_error(message, status=400, code="bad_request"):
+    return jsonify({"ok": False, "data": None, "error": {"code": code, "message": message}}), status
+
 # --- ROUTES ---
 @app.route("/")
 def index():
-    conn = db_service.sqlite3.connect(DB_FILE)
-    conn.row_factory = db_service.sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT id, title, date_added FROM videos ORDER BY id DESC")
-    library = c.fetchall()
+    with db_service.sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = db_service.sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT id, title, date_added FROM videos ORDER BY id DESC")
+        library = c.fetchall()
     return render_template("index.html", library=library)
 
 @app.route("/search", methods=["POST"])
 def global_search():
     query = request.json.get("query", "").lower()
     if not query: return jsonify([])
-    conn = db_service.sqlite3.connect(DB_FILE)
-    conn.row_factory = db_service.sqlite3.Row
-    c = conn.cursor()
-    c.execute("""SELECT id, title, date_added FROM videos 
-                 WHERE lower(title) LIKE ? OR lower(transcript) LIKE ? OR lower(ocr_text) LIKE ?""", 
-              (f'%{query}%', f'%{query}%', f'%{query}%'))
-    return jsonify([dict(r) for r in c.fetchall()])
+    with db_service.sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = db_service.sqlite3.Row
+        c = conn.cursor()
+        c.execute("""SELECT id, title, date_added FROM videos 
+                    WHERE lower(title) LIKE ? OR lower(transcript) LIKE ? OR lower(ocr_text) LIKE ?""", 
+                (f'%{query}%', f'%{query}%', f'%{query}%'))
+        rows = c.fetchall()
+    return jsonify([dict(r) for r in rows])
 
 @app.route("/load/<int:video_id>")
 def load_video(video_id):
@@ -73,6 +81,43 @@ def load_video(video_id):
                 segments.append({"start": int(m)*60 + int(s), "text": txt})
         return render_template("result.html", segments=segments, video_file=video["filename"], slides=current_video_data["slides"], video_id=video["id"])
     return redirect(url_for("index"))
+
+@app.route("/load/<video_id>")
+def load_video_fallback(video_id):
+    """
+    Friendly fallback when users visit placeholder URLs like /load/<video_id>.
+    """
+    cleaned = (video_id or "").strip()
+
+    # Common placeholder patterns from docs/examples
+    if cleaned in {"<video_id>", "{video_id}", ":video_id"}:
+        latest = db_service.get_latest_video()
+        if latest:
+            return redirect(url_for("load_video", video_id=latest["id"]))
+        return redirect(url_for("index"))
+
+    # If it's numeric but did not match int route for any reason
+    if cleaned.isdigit():
+        return redirect(url_for("load_video", video_id=int(cleaned)))
+
+    return redirect(url_for("index"))
+
+@app.route("/load/mediapipe/<path:asset>")
+def mediapipe_asset_fallback(asset):
+    """
+    Compatibility route for stale frontend bundles that resolve MediaPipe assets
+    relative to /load/<id>, causing /load/mediapipe/... 404s.
+    """
+    safe_asset = (asset or "").lstrip("/")
+    face_prefix = "face_mesh/"
+    hands_prefix = "hands/"
+    if safe_asset.startswith(face_prefix):
+        rel = safe_asset[len(face_prefix):]
+        return redirect(f"https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/{rel}", code=302)
+    if safe_asset.startswith(hands_prefix):
+        rel = safe_asset[len(hands_prefix):]
+        return redirect(f"https://cdn.jsdelivr.net/npm/@mediapipe/hands/{rel}", code=302)
+    return redirect(f"https://cdn.jsdelivr.net/npm/@mediapipe/{safe_asset}", code=302)
 
 import threading
 import uuid
@@ -138,6 +183,80 @@ def get_status(task_id):
 def get_graph():
     data = db_service.get_graph_data()
     return jsonify(data)
+
+@app.route("/mindmap_data", methods=["POST"])
+def mindmap_data():
+    started = time.time()
+    data = request.get_json(silent=True) or {}
+    video_id = data.get("video_id")
+    
+    mem = ""
+    title = "Knowledge Graph"
+    
+    # Prefer explicit video_id from request (most reliable)
+    if video_id:
+        video = db_service.get_video_by_id(video_id)
+        if video:
+            title = video["title"]
+            mem = (video["transcript"] or "") + "\n\n" + (video["ocr_text"] or "")
+    
+    # Fallback to in-memory session data
+    if not mem and current_video_data:
+        mem = current_video_data.get("memory", "")
+        title = current_video_data.get("title", title)
+    
+    # Last resort: latest video in DB
+    if not mem:
+        vid = db_service.get_latest_video()
+        if vid:
+            title = vid["title"]
+            mem = (vid["transcript"] or "") + "\n\n" + (vid["ocr_text"] or "")
+    
+    if not mem.strip():
+        return jsonify({"error": "No transcript data found. Please process a video first."})
+    
+    print(f"[MindMap] Building graph for: {title} ({len(mem)} chars)")
+    result = ai_service.extract_mindmap_json(mem[:22000])
+    print(f"[MindMap] Completed in {time.time() - started:.2f}s")
+    result["video_title"] = title  # pass title to frontend for display
+    return jsonify(result)
+
+
+def _get_video_memory(video_id=None):
+    """Helper: get transcript memory for a given video_id or current session."""
+    if video_id:
+        video = db_service.get_video_by_id(video_id)
+        if video:
+            return video["title"], (video["transcript"] or "") + "\n\n" + (video["ocr_text"] or "")
+    if current_video_data:
+        return current_video_data.get("title",""), current_video_data.get("memory","")
+    vid = db_service.get_latest_video()
+    if vid:
+        return vid["title"], (vid["transcript"] or "") + "\n\n" + (vid["ocr_text"] or "")
+    return "", ""
+
+@app.route("/flashcards_data", methods=["POST"])
+def flashcards_data():
+    started = time.time()
+    data = request.get_json(silent=True) or {}
+    title, mem = _get_video_memory(data.get("video_id"))
+    if not mem.strip():
+        return jsonify({"error": "No transcript found."})
+    cards = ai_service.generate_flashcards(mem[:18000])
+    print(f"[Flashcards] Completed in {time.time() - started:.2f}s")
+    return jsonify({"cards": cards, "title": title})
+
+@app.route("/summary_data", methods=["POST"])
+def summary_data():
+    started = time.time()
+    data = request.get_json(silent=True) or {}
+    title, mem = _get_video_memory(data.get("video_id"))
+    if not mem.strip():
+        return jsonify({"error": "No transcript found."})
+    summary = ai_service.generate_summary(mem[:18000])
+    print(f"[Summary] Completed in {time.time() - started:.2f}s")
+    summary["title"] = title
+    return jsonify(summary)
 
 @app.route("/process", methods=["POST"])
 def process_video():
@@ -273,24 +392,74 @@ def global_chat():
 
 @app.route("/get_notes/<int:video_id>")
 def get_notes(video_id):
-    conn = db_service.sqlite3.connect(DB_FILE)
-    conn.row_factory = db_service.sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM notes WHERE video_id = ? ORDER BY timestamp ASC", (video_id,))
-    notes = [dict(r) for r in c.fetchall()]
-    conn.close()
+    with db_service.sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = db_service.sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM notes WHERE video_id = ? ORDER BY timestamp ASC", (video_id,))
+        notes = [dict(r) for r in c.fetchall()]
     return jsonify(notes)
 
 @app.route("/save_note", methods=["POST"])
 def save_note():
     data = request.json
-    conn = db_service.sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT INTO notes (video_id, timestamp, text, created_at) VALUES (?, ?, ?, ?)",
-              (data['video_id'], data['timestamp'], data['text'], datetime.now().strftime("%Y-%m-%d %H:%M")))
-    conn.commit()
-    conn.close()
+    with db_service.sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO notes (video_id, timestamp, text, created_at) VALUES (?, ?, ?, ?)",
+                (data['video_id'], data['timestamp'], data['text'], datetime.now().strftime("%Y-%m-%d %H:%M")))
+        conn.commit()
     return jsonify({"status": "saved"})
+
+@app.route("/health")
+def health():
+    diagnostics = {"db": "ok", "vector": "ok", "ai": "ok", "media": "ok"}
+    try:
+        with db_service.sqlite3.connect(DB_FILE) as conn:
+            conn.execute("SELECT 1")
+    except Exception as e:
+        diagnostics["db"] = f"error: {e}"
+    try:
+        _ = db_service.vector_collection.count()
+    except Exception as e:
+        diagnostics["vector"] = f"error: {e}"
+    return jsonify({
+        "status": "ok" if all(v == "ok" for v in diagnostics.values()) else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "services": diagnostics
+    })
+
+def _wrap_api(handler):
+    try:
+        data = handler()
+        return api_ok(data)
+    except Exception as e:
+        return api_error(str(e), status=500, code="internal_error")
+
+@app.route("/api/v1/chat", methods=["POST"])
+def api_v1_chat():
+    def _handler():
+        response = chat().get_json()
+        return response
+    return _wrap_api(_handler)
+
+@app.route("/api/v1/summary", methods=["POST"])
+def api_v1_summary():
+    return _wrap_api(lambda: summary_data().get_json())
+
+@app.route("/api/v1/flashcards", methods=["POST"])
+def api_v1_flashcards():
+    return _wrap_api(lambda: flashcards_data().get_json())
+
+@app.route("/api/v1/mindmap", methods=["POST"])
+def api_v1_mindmap():
+    return _wrap_api(lambda: mindmap_data().get_json())
+
+@app.route("/api/v1/notes/<int:video_id>", methods=["GET"])
+def api_v1_get_notes(video_id):
+    return _wrap_api(lambda: get_notes(video_id).get_json())
+
+@app.route("/api/v1/notes", methods=["POST"])
+def api_v1_save_note():
+    return _wrap_api(lambda: save_note().get_json())
 
 @app.route("/magic_fix", methods=["POST"])
 def magic_fix():
