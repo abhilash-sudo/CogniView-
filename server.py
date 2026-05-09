@@ -18,7 +18,7 @@ from services import db_service, ai_service, media_service
 app = Flask(__name__)
 
 # --- INITIALIZATION ---
-print("✅ Server Imports Complete. Initializing DB...")
+print("[Server] Imports complete. Initializing DB...")
 db_service.init_db()
 ddgs = DDGS()
 
@@ -79,7 +79,14 @@ def load_video(video_id):
             if match:
                 m, s, txt = match.groups()
                 segments.append({"start": int(m)*60 + int(s), "text": txt})
-        return render_template("result.html", segments=segments, video_file=video["filename"], slides=current_video_data["slides"], video_id=video["id"])
+        return render_template(
+            "result.html",
+            segments=segments,
+            video_file=video["filename"],
+            slides=current_video_data["slides"],
+            video_id=video["id"],
+            video_title=video["title"]
+        )
     return redirect(url_for("index"))
 
 @app.route("/load/<video_id>")
@@ -235,6 +242,130 @@ def _get_video_memory(video_id=None):
         return vid["title"], (vid["transcript"] or "") + "\n\n" + (vid["ocr_text"] or "")
     return "", ""
 
+def _parse_transcript_segments(transcript):
+    segments = []
+    for line in (transcript or "").splitlines():
+        match = re.match(r"\[(\d+):(\d+)\]\s*(.*)", line.strip())
+        if match:
+            minutes, seconds, text = match.groups()
+            segments.append({
+                "seconds": int(minutes) * 60 + int(seconds),
+                "text": text.strip()
+            })
+    return segments
+
+def _word_count(text):
+    return len(re.findall(r"\b[\w'-]+\b", text or ""))
+
+def _context_window(memory, timestamp, radius_seconds=75):
+    segments = _parse_transcript_segments(memory)
+    if not segments:
+        return (memory or "")[:2400]
+    center = float(timestamp or 0)
+    nearby = [
+        f"[{s['seconds'] // 60:02d}:{s['seconds'] % 60:02d}] {s['text']}"
+        for s in segments
+        if abs(s["seconds"] - center) <= radius_seconds
+    ]
+    if not nearby:
+        nearby = [
+            f"[{s['seconds'] // 60:02d}:{s['seconds'] % 60:02d}] {s['text']}"
+            for s in segments[:8]
+        ]
+    return "\n".join(nearby)[:2800]
+
+def _build_cognitive_profile(video_id):
+    profile = db_service.get_video_profile(video_id)
+    if not profile:
+        raise ValueError("Video not found.")
+
+    video = profile["video"]
+    transcript = video.get("transcript") or ""
+    ocr_text = video.get("ocr_text") or ""
+    slides = json.loads(video.get("slides") or "[]")
+    notes = profile["notes"]
+    concepts = profile["concepts"]
+    segments = _parse_transcript_segments(transcript)
+
+    transcript_words = _word_count(transcript)
+    visual_words = _word_count(ocr_text)
+    duration_seconds = segments[-1]["seconds"] if segments else 0
+    duration_minutes = max(1, round(duration_seconds / 60)) if duration_seconds else max(1, round(transcript_words / 135))
+    notes_per_10_min = round((len(notes) / max(duration_minutes, 1)) * 10, 1)
+    concept_density = round((len(concepts) / max(transcript_words, 1)) * 1000, 1)
+
+    timeline = []
+    if segments:
+        bucket_size = max(120, int(max(duration_seconds, 1) / 6))
+        buckets = {}
+        for seg in segments:
+            bucket = (seg["seconds"] // bucket_size) * bucket_size
+            buckets.setdefault(bucket, []).append(seg["text"])
+        for start, texts in sorted(buckets.items())[:8]:
+            joined = " ".join(texts)
+            timeline.append({
+                "start": start,
+                "label": f"{start // 60:02d}:{start % 60:02d}",
+                "words": _word_count(joined),
+                "sample": joined[:140].strip()
+            })
+
+    readiness = 52
+    readiness += min(18, len(notes) * 3)
+    readiness += min(14, len(concepts) * 2)
+    readiness += min(10, len(slides))
+    readiness += 6 if visual_words > 80 else 0
+    readiness = max(0, min(100, readiness))
+
+    recommendations = []
+    if len(notes) < max(2, duration_minutes // 8):
+        recommendations.append("Add timestamped notes at major transitions to improve recall.")
+    if len(concepts) < 5:
+        recommendations.append("Run the mind map or quiz once to strengthen concept extraction.")
+    if visual_words < 80 and slides:
+        recommendations.append("Review slide thumbnails manually; OCR found limited text.")
+    if transcript_words > 2500:
+        recommendations.append("Use Speed mode for a first recap, then quiz yourself.")
+    if not recommendations:
+        recommendations.append("The session is well prepared. Move into quiz and flashcard review.")
+
+    distribution = [
+        {"label": "Transcript", "value": transcript_words},
+        {"label": "Visual OCR", "value": visual_words},
+        {"label": "Notes", "value": len(notes) * 45},
+        {"label": "Concepts", "value": len(concepts) * 90},
+    ]
+    mastery = db_service.get_mastery_snapshot(video_id)
+    recent_events = db_service.get_cognitive_events(video_id, limit=40)
+    focus_values = [e["value"] for e in recent_events if e.get("event_type") == "focus_sample" and e.get("value") is not None]
+    avg_focus = round(sum(focus_values) / len(focus_values)) if focus_values else None
+
+    return {
+        "title": video.get("title"),
+        "readiness": readiness,
+        "stats": {
+            "duration_minutes": duration_minutes,
+            "transcript_words": transcript_words,
+            "visual_words": visual_words,
+            "slides": len(slides),
+            "notes": len(notes),
+            "concepts": len(concepts),
+            "notes_per_10_min": notes_per_10_min,
+            "concept_density": concept_density,
+        },
+        "concepts": concepts[:12],
+        "timeline": timeline,
+        "distribution": distribution,
+        "recommendations": recommendations,
+        "mastery": mastery,
+        "cognitive": {
+            "events": recent_events[-16:],
+            "event_count": len(recent_events),
+            "average_focus": avg_focus,
+            "interventions": len([e for e in recent_events if e.get("event_type") == "autopilot_intervention"]),
+        },
+    }
+
 @app.route("/flashcards_data", methods=["POST"])
 def flashcards_data():
     started = time.time()
@@ -335,45 +466,30 @@ Example Format:
         res = ai_service.ask_ai(sys, "Create a mind map.")
         return jsonify({"response": res})
 
-    sys = f"""
-    You are CogniView. 
-    CURRENT STATUS: User at [{time_str}].
-    CONTEXT: "{safe_mem}"
-    CRITICAL: If user says "Explain this", explain content at [{time_str}].
-    Reply in {lang}.
-    """
-    ai_reply = ai_service.ask_ai(sys, user_q).strip()
-
-    if ai_reply.startswith("SEARCH:"):
-        query = ai_reply.replace("SEARCH:", "").strip()
-        print(f"🌍 SEARCHING: {query}")
-        results = ddgs.text(query, max_results=3)
-        search_context = "\n".join([f"- {r['title']}: {r['body']}" for r in results]) if results else "No results."
-        final_sys = f"You are CogniView. Found these web results:\n{search_context}\nTASK: Answer user in {lang}. Start with 'I found online...'."
-        ai_reply = ai_service.ask_ai(final_sys, user_q)
-
-    if lang != "en":
-        try: ai_reply = GoogleTranslator(source='auto', target=lang).translate(ai_reply)
-        except: pass 
-            
-    return jsonify({"response": ai_reply})
+    ai_reply = ai_service.generate_debate(safe_mem, user_q)
+    return jsonify({"debate": ai_reply})
 
 @app.route("/global_chat", methods=["POST"])
 def global_chat():
-    user_q = request.json.get("message")
+    payload = request.get_json(silent=True) or {}
+    user_q = (payload.get("message") or "").strip()
+    if not user_q:
+        return jsonify({"response": "Ask a question and I will search your video library."})
     
     # 1. Semantic Search
-    print(f"🧠 Hive Mind Query: {user_q}")
+    print(f"[HiveMind] Query: {user_q}")
     results = db_service.search_vectors(user_q)
     
-    if not results['documents'][0]:
+    documents = results.get("documents") or [[]]
+    metadatas = results.get("metadatas") or [[]]
+    if not documents[0]:
         return jsonify({"response": "I couldn't find any relevant info in your video library. Try uploading more videos!"})
 
     # 2. Build Context
     combined_context = ""
-    for i, doc in enumerate(results['documents'][0]):
-        meta = results['metadatas'][0][i]
-        combined_context += f"\n\n--- SOURCE: {meta['title']} ---\n{doc}..."
+    for i, doc in enumerate(documents[0]):
+        meta = metadatas[0][i] if i < len(metadatas[0]) else {}
+        combined_context += f"\n\n--- SOURCE: {meta.get('title', 'Unknown video')} ---\n{doc}..."
 
     # 3. Ask AI
     sys = f"""
@@ -461,6 +577,99 @@ def api_v1_get_notes(video_id):
 def api_v1_save_note():
     return _wrap_api(lambda: save_note().get_json())
 
+@app.route("/api/v1/cognitive-profile/<int:video_id>", methods=["GET"])
+def api_v1_cognitive_profile(video_id):
+    return _wrap_api(lambda: _build_cognitive_profile(video_id))
+
+@app.route("/api/v1/cognitive-events/<int:video_id>", methods=["GET"])
+def api_v1_cognitive_events(video_id):
+    limit = min(int(request.args.get("limit", 120)), 500)
+    return _wrap_api(lambda: db_service.get_cognitive_events(video_id, limit=limit))
+
+@app.route("/api/v1/cognitive-event", methods=["POST"])
+def api_v1_cognitive_event():
+    def _handler():
+        data = request.get_json(silent=True) or {}
+        video_id = int(data.get("video_id") or 0)
+        if not video_id:
+            raise ValueError("video_id is required")
+        event_id = db_service.save_cognitive_event(
+            video_id=video_id,
+            timestamp=float(data.get("timestamp") or 0),
+            event_type=(data.get("event_type") or "event")[:80],
+            signal=(data.get("signal") or "")[:80],
+            value=data.get("value"),
+            payload=data.get("payload") or {},
+        )
+        return {"id": event_id}
+    return _wrap_api(_handler)
+
+@app.route("/api/v1/mastery/<int:video_id>", methods=["GET"])
+def api_v1_mastery(video_id):
+    return _wrap_api(lambda: db_service.get_mastery_snapshot(video_id))
+
+@app.route("/api/v1/mastery-event", methods=["POST"])
+def api_v1_mastery_event():
+    def _handler():
+        data = request.get_json(silent=True) or {}
+        video_id = int(data.get("video_id") or 0)
+        if not video_id:
+            raise ValueError("video_id is required")
+        event_id = db_service.save_mastery_event(
+            video_id=video_id,
+            concept=data.get("concept") or "General",
+            event_type=(data.get("event_type") or "study")[:80],
+            score_delta=float(data.get("score_delta") or 0),
+            confidence=float(data.get("confidence") or 0.5),
+            timestamp=float(data.get("timestamp") or 0),
+        )
+        return {"id": event_id, "mastery": db_service.get_mastery_snapshot(video_id)}
+    return _wrap_api(_handler)
+
+@app.route("/api/v1/autopilot-intervention", methods=["POST"])
+def api_v1_autopilot_intervention():
+    def _handler():
+        data = request.get_json(silent=True) or {}
+        video_id = int(data.get("video_id") or 0)
+        timestamp = float(data.get("timestamp") or 0)
+        trigger = (data.get("trigger") or "autopilot").strip()
+        title, memory = _get_video_memory(video_id)
+        if not memory.strip():
+            raise ValueError("No transcript found.")
+        context = _context_window(memory, timestamp)
+        mastery = db_service.get_mastery_snapshot(video_id)
+        weak = ", ".join([x["concept"] for x in mastery.get("weak", [])[:4]]) or "not enough data yet"
+        sys = """You are CogniView Autopilot Tutor. Return ONLY valid JSON.
+Format:
+{"headline":"short title","explanation":"2-3 sentence simple explanation","micro_question":"one quick check question","expected_answer":"short answer","action":"pause|slow|resume|quiz","concept":"one concept name"}"""
+        prompt = f"""Video: {title}
+Timestamp: {timestamp:.1f}
+Trigger: {trigger}
+Weak concepts: {weak}
+Context:
+{context}
+
+Create the next best tutoring intervention."""
+        raw = ai_service.ask_ai_for_task("chat", sys, prompt)
+        try:
+            cleaned = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+            s, e = cleaned.find("{"), cleaned.rfind("}") + 1
+            result = json.loads(cleaned[s:e])
+        except Exception:
+            result = {
+                "headline": "Autopilot Tutor",
+                "explanation": ai_service.simplify_context(context),
+                "micro_question": "What is the main idea in this section?",
+                "expected_answer": "A concise explanation of the current concept.",
+                "action": "pause",
+                "concept": "General",
+            }
+        db_service.save_cognitive_event(video_id, timestamp, "autopilot_intervention", trigger, None, result)
+        db_service.save_mastery_event(video_id, result.get("concept") or "General", "intervention", -2, 0.55, timestamp)
+        result["mastery"] = db_service.get_mastery_snapshot(video_id)
+        return result
+    return _wrap_api(_handler)
+
 @app.route("/magic_fix", methods=["POST"])
 def magic_fix():
     user_note = request.json.get("text")
@@ -528,14 +737,17 @@ def generate_quiz():
         vid = db_service.get_latest_video()
         if vid:
              current_video_data = {
-                "title": vid["title"], "memory": vid["transcript"] + "\n" + (vid["ocr_text"] or ""),
+                "id": vid["id"], "title": vid["title"],
+                "memory": vid["transcript"] + "\n" + (vid["ocr_text"] or ""),
                 "filename": vid["filename"], "slides": json.loads(vid["slides"])
              }
         else: return jsonify({"error": "No video loaded."})
-    sys = f"""CONTEXT: "{current_video_data['memory'][:25000]}"
-    TASK: Generate 5 multiple-choice questions. STRICT JSON FORMAT: [{{"q":"?","options":["A","B"],"correct":0}}]"""
-    res = ai_service.ask_ai(sys, "Generate Quiz")
-    return jsonify({"quiz_data": clean_json_output(res)})
+    questions = ai_service.generate_quiz_v2(current_video_data['memory'][:25000])
+    return jsonify({"quiz_data": json.dumps(questions)})
+
+@app.route("/api/v1/quiz", methods=["POST"])
+def api_v1_quiz():
+    return _wrap_api(lambda: generate_quiz().get_json())
 
 @app.route("/chapters", methods=["POST"])
 def generate_chapters():

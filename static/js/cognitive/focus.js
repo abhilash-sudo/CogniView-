@@ -1,35 +1,33 @@
 export function createFocusEngine(ctx) {
-    let calPoints = 0;
     let focusScore = 100;
-    let gazeBuffer = [];
     let lookAwayFrames = 0;
-    let permissionStream = null;
-
-    function resetCalibrationDots() {
-        document.querySelectorAll(".calibration-dot").forEach((el) => {
-            delete el.dataset.calDone;
-            el.style.backgroundColor = "";
-            el.style.transform = "";
-            el.style.display = "none";
-        });
-    }
+    let stream = null;
+    let videoEl = null;
+    let rafId = null;
+    let active = false;
+    let faceDetection;
+    let pausedByFocusGuard = false;
+    let lastTelemetryAt = 0;
 
     function stop(showToast = true) {
-        try { window.webgazer?.end(); } catch (e) {}
-        if (permissionStream) {
-            ctx.controller.stopStream(permissionStream);
-            permissionStream = null;
-        }
+        active = false;
+        ctx.controller.setMode("focus", false);
+        cancelAnimationFrame(rafId);
+        if (stream) { ctx.controller.stopStream(stream); stream = null; }
+        if (videoEl) { videoEl.remove(); videoEl = null; }
+        
         const vid = document.getElementById("vid");
-        if (vid?.paused) vid.play();
+        if (pausedByFocusGuard && vid?.paused) vid.play();
+        pausedByFocusGuard = false;
+        
         document.getElementById("focus-overlay").style.display = "none";
         document.getElementById("hud-layer").style.display = "none";
         ctx.controller.setHUDActive(false);
         ctx.setDot("dot-focus", "");
         ctx.setControlState("btn-focus", "");
         ctx.setControlState("btn-hud", "");
-        ctx.controller.setMode("focus", false);
-        resetCalibrationDots();
+        
+        if (window.cwUpdateFocus) window.cwUpdateFocus(0, false);
         if (showToast) ctx.showToast("👁️ Focus Guard Deactivated");
     }
 
@@ -44,87 +42,110 @@ export function createFocusEngine(ctx) {
         ctx.showToast("📷 Requesting camera access…");
         ctx.setDot("dot-focus", "warn");
         ctx.setControlState("btn-focus", "warn");
+        
         try {
-            permissionStream = await ctx.controller.requestCameraStream();
-            ctx.controller.stopStream(permissionStream);
-            permissionStream = null;
-            if (!window.webgazer || typeof window.webgazer.begin !== "function") {
-                throw new Error("Focus engine failed to load. Refresh page and try again.");
+            stream = await ctx.controller.requestCameraStream();
+            videoEl = document.createElement("video");
+            videoEl.srcObject = stream;
+            videoEl.style.display = "none";
+            videoEl.playsInline = true;
+            document.body.appendChild(videoEl);
+            await videoEl.play();
+            
+            if (!faceDetection) {
+                faceDetection = new window.FaceDetection({
+                    locateFile: (f) => {
+                        if (f.includes('face_mesh')) return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`;
+                        if (f.includes('hands')) return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`;
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}`;
+                    }
+                });
+                faceDetection.setOptions({
+                    model: 'short',
+                    minDetectionConfidence: 0.4
+                });
+                faceDetection.onResults(onResults);
             }
-            await window.webgazer
-                .setRegression("ridge")
-                .showVideoPreview(false)
-                .showPredictionPoints(false)
-                .begin();
-            window.webgazer.setGazeListener(onGazeData);
-
-            calPoints = 0;
+            
+            active = true;
             focusScore = 100;
             lookAwayFrames = 0;
-            gazeBuffer = [];
-            document.querySelectorAll(".calibration-dot").forEach((el) => el.style.display = "block");
+            
             ctx.controller.setMode("focus", true);
             ctx.setDot("dot-focus", "active");
             ctx.setControlState("btn-focus", "active");
-            ctx.showToast("✅ Camera Active! Click all 9 dots to calibrate.");
+            ctx.showToast("✅ Focus Guard Active! (Zero Calibration)");
+            loop();
         } catch (err) {
-            if (permissionStream) {
-                ctx.controller.stopStream(permissionStream);
-                permissionStream = null;
-            }
-            ctx.setDot("dot-focus", "");
-            ctx.setControlState("btn-focus", "");
+            stop(false);
             ctx.showToast("⚠️ Focus camera error: " + ctx.controller.formatCameraError(err));
             console.error("[FocusGuard]", err);
         }
     }
 
-    function onGazeData(data) {
-        if (!data || !ctx.controller.getState().focusActive) return;
-        gazeBuffer.push({ x: data.x, y: data.y });
-        if (gazeBuffer.length > 5) gazeBuffer.shift();
-        const sx = gazeBuffer.reduce((a, b) => a + b.x, 0) / gazeBuffer.length;
-        const sy = gazeBuffer.reduce((a, b) => a + b.y, 0) / gazeBuffer.length;
+    async function loop() {
+        if (!ctx.controller.getState().focusActive) return;
+        if (videoEl && videoEl.readyState >= 2) await faceDetection.send({ image: videoEl });
+        rafId = requestAnimationFrame(loop);
+    }
 
+    function onResults(results) {
+        if (!ctx.controller.getState().focusActive) return;
+        
         const vid = document.getElementById("vid");
         const overlay = document.getElementById("focus-overlay");
-        const rect = vid.getBoundingClientRect();
-        if (ctx.controller.getState().hudActive) {
-            const reticle = document.getElementById("hud-reticle");
-            reticle.style.left = (sx - rect.left) + "px";
-            reticle.style.top = (sy - rect.top) + "px";
+        
+        // If a face is detected, focus is high. If no face is detected, focus drops.
+        const hit = results.detections && results.detections.length > 0;
+        
+        // Rapid focus drop to immediately pause the video
+        focusScore = hit ? Math.min(100, focusScore + 1.0) : Math.max(0, focusScore - 5.0);
+
+        if (window.cwUpdateFocus) window.cwUpdateFocus(focusScore, true);
+        const now = Date.now();
+        if (window.CogniViewTelemetry && now - lastTelemetryAt > 4500) {
+            lastTelemetryAt = now;
+            window.CogniViewTelemetry.recordEvent("focus_sample", {
+                signal: hit ? "face_locked" : "face_lost",
+                value: Math.round(focusScore),
+                state: hit ? "locked" : "lost"
+            });
         }
-        const hit = sx > rect.left - 120 && sx < rect.right + 120 && sy > rect.top - 80 && sy < rect.bottom + 80;
-        focusScore = hit ? Math.min(100, focusScore + 0.3) : Math.max(0, focusScore - 0.4);
+
         if (ctx.controller.getState().hudActive) {
             document.getElementById("hud-score").innerText = `FOCUS: ${Math.floor(focusScore)}%`;
             document.getElementById("hud-reticle").style.borderColor = hit ? "var(--accent)" : "var(--red)";
             document.getElementById("hud-msg").innerText = hit ? "LOCKED ON" : "TARGET LOST";
             document.getElementById("hud-msg").style.color = hit ? "var(--accent)" : "var(--red)";
+            
+            // Just place reticle at center of screen for effect since we don't track eye gaze X/Y anymore
+            const rect = vid.getBoundingClientRect();
+            const reticle = document.getElementById("hud-reticle");
+            reticle.style.left = (rect.width / 2) + "px";
+            reticle.style.top = (rect.height / 2) + "px";
         }
-        if (hit) {
+        
+        if (focusScore > 30) {
             lookAwayFrames = 0;
             overlay.style.display = "none";
-            if (vid.paused && calPoints >= 9) vid.play();
+            if (pausedByFocusGuard && vid.paused) {
+                vid.play();
+                pausedByFocusGuard = false;
+            }
         } else {
             lookAwayFrames++;
-            if (lookAwayFrames > 8) {
+            if (lookAwayFrames > 3) {
                 overlay.style.display = "flex";
-                if (!vid.paused) vid.pause();
+                if (!vid.paused) {
+                    vid.pause();
+                    pausedByFocusGuard = true;
+                    window.CogniViewTelemetry?.recordEvent("focus_guard_pause", {
+                        signal: "low_focus",
+                        value: Math.round(focusScore)
+                    });
+                    if (window.cwAlertTick) window.cwAlertTick();
+                }
             }
-        }
-    }
-
-    function cal(el) {
-        if (el.dataset.calDone === "1") return;
-        el.dataset.calDone = "1";
-        el.style.backgroundColor = "#34D399";
-        el.style.transform = "scale(1.5)";
-        setTimeout(() => { el.style.transform = "scale(1)"; }, 200);
-        calPoints++;
-        if (calPoints >= 9) {
-            document.querySelectorAll(".calibration-dot").forEach((e) => e.style.display = "none");
-            ctx.showToast("🎯 Calibration Complete! Focus Guard is ACTIVE.");
         }
     }
 
@@ -139,5 +160,5 @@ export function createFocusEngine(ctx) {
         ctx.setControlState("btn-hud", next ? "active" : "");
     }
 
-    return { start, stop, cal, toggleHUD };
+    return { start, stop, toggleHUD };
 }

@@ -21,6 +21,9 @@ export class CognitiveController {
         if (modeName === "gesture") this.state.gestureActive = isActive;
         if (modeName === "emotion") this.state.emotionActive = isActive;
         this.state.activeMode = isActive ? modeName : this._currentActiveMode();
+        window.dispatchEvent(new CustomEvent("cogniview:modechange", {
+            detail: { ...this.state }
+        }));
     }
 
     _currentActiveMode() {
@@ -46,6 +49,7 @@ export class CognitiveController {
             throw new Error("Camera API unavailable in this browser/context.");
         }
         const constraints = [
+            { video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 }, facingMode: "user" } },
             { video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" } },
             { video: { facingMode: "user" } },
             { video: true }

@@ -34,7 +34,7 @@ window.toggleEmotion = () => emotionEngine.start({
     stopGesture: gestureEngine.stop
 });
 window.toggleHUD = () => focusEngine.toggleHUD();
-window.cal = (el) => focusEngine.cal(el);
+// Calibration removed
 window.stopFocusGuard = focusEngine.stop;
 window.stopGestures = gestureEngine.stop;
 window.stopEmotion = emotionEngine.stop;

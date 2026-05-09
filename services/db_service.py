@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from config import DB_FILE, CHROMA_DB_PATH
 
 # --- VECTOR DATABASE SETUP ---
-print("🧠 Loading Vector Brain (ChromaDB)...")
+print("[VectorBrain] Loading ChromaDB...")
 chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 vector_collection = chroma_client.get_or_create_collection(name="video_knowledge")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2') 
@@ -35,6 +35,14 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS concepts
                     (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, 
                     concept TEXT, UNIQUE(video_id, concept))''')
+        c.execute('''CREATE TABLE IF NOT EXISTS cognitive_events
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER,
+                    timestamp REAL, event_type TEXT, signal TEXT, value REAL,
+                    payload TEXT, created_at TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS mastery_events
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER,
+                    concept TEXT, event_type TEXT, score_delta REAL,
+                    confidence REAL, timestamp REAL, created_at TEXT)''')
         conn.commit()
 
 def save_concepts(video_id, concepts):
@@ -99,9 +107,100 @@ def get_video_by_id(video_id):
         video = c.fetchone()
     return video
 
+def get_notes_for_video(video_id):
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("SELECT * FROM notes WHERE video_id = ? ORDER BY timestamp ASC", (video_id,))
+        return [dict(r) for r in c.fetchall()]
+
+def get_concepts_for_video(video_id):
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("SELECT concept FROM concepts WHERE video_id = ? ORDER BY concept ASC", (video_id,))
+        return [r["concept"] for r in c.fetchall()]
+
+def get_video_profile(video_id):
+    video = get_video_by_id(video_id)
+    if not video:
+        return None
+    notes = get_notes_for_video(video_id)
+    concepts = get_concepts_for_video(video_id)
+    return {
+        "video": dict(video),
+        "notes": notes,
+        "concepts": concepts,
+    }
+
+def save_cognitive_event(video_id, timestamp, event_type, signal="", value=None, payload=None):
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("""INSERT INTO cognitive_events
+                    (video_id, timestamp, event_type, signal, value, payload, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                  (video_id, timestamp, event_type, signal, value,
+                   json.dumps(payload or {}), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return c.lastrowid
+
+def get_cognitive_events(video_id, limit=120):
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("""SELECT * FROM cognitive_events
+                    WHERE video_id = ? ORDER BY id DESC LIMIT ?""", (video_id, limit))
+        rows = [dict(r) for r in c.fetchall()]
+    for row in rows:
+        try:
+            row["payload"] = json.loads(row.get("payload") or "{}")
+        except Exception:
+            row["payload"] = {}
+    return list(reversed(rows))
+
+def save_mastery_event(video_id, concept, event_type, score_delta=0, confidence=0.5, timestamp=0):
+    concept = (concept or "General").strip()[:120] or "General"
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("""INSERT INTO mastery_events
+                    (video_id, concept, event_type, score_delta, confidence, timestamp, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                  (video_id, concept, event_type, score_delta, confidence, timestamp,
+                   datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return c.lastrowid
+
+def get_mastery_snapshot(video_id):
+    concepts = get_concepts_for_video(video_id)
+    mastery = {c: {"concept": c, "score": 48, "events": 0, "confidence": 0.35} for c in concepts}
+    with get_conn(row_factory=True) as conn:
+        c = conn.cursor()
+        c.execute("""SELECT concept, event_type, score_delta, confidence
+                    FROM mastery_events WHERE video_id = ?""", (video_id,))
+        rows = c.fetchall()
+    for row in rows:
+        concept = row["concept"] or "General"
+        item = mastery.setdefault(concept, {"concept": concept, "score": 48, "events": 0, "confidence": 0.35})
+        item["score"] += float(row["score_delta"] or 0)
+        item["events"] += 1
+        item["confidence"] = max(item["confidence"], float(row["confidence"] or 0.35))
+    for item in mastery.values():
+        item["score"] = max(0, min(100, round(item["score"])))
+        if item["score"] >= 76:
+            item["state"] = "strong"
+        elif item["score"] >= 55:
+            item["state"] = "building"
+        else:
+            item["state"] = "weak"
+        item["confidence"] = round(max(0, min(1, item["confidence"])), 2)
+    ordered = sorted(mastery.values(), key=lambda x: (x["score"], -x["events"], x["concept"]))
+    return {
+        "items": ordered,
+        "weak": [x for x in ordered if x["state"] == "weak"][:6],
+        "strong": [x for x in reversed(ordered) if x["state"] == "strong"][:6],
+        "average": round(sum(x["score"] for x in ordered) / len(ordered)) if ordered else 0,
+    }
+
 def vectorize_and_store(video_id, title, text):
     """Chunks text and stores semantic vectors."""
-    print(f"🧠 Vectorizing video: {title}...")
+    print(f"[VectorBrain] Vectorizing video: {title}...")
     
     # Split text into chunks (e.g., 1000 characters)
     chunk_size = 1000
@@ -120,7 +219,7 @@ def vectorize_and_store(video_id, title, text):
         documents=chunks,
         metadatas=metadatas
     )
-    print(f"✅ Stored {len(chunks)} knowledge chunks in Vector Brain.")
+    print(f"[VectorBrain] Stored {len(chunks)} knowledge chunks.")
 
 def search_vectors(query, n_results=5):
     query_embedding = embedding_model.encode([query]).tolist()

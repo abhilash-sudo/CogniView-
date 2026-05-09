@@ -8,23 +8,29 @@ export function createEmotionEngine(ctx) {
     let canvasCtx;
     let confusionFrames = 0;
     let isExplaining = false;
+    let lastTelemetryAt = 0;
+
+    function escapeHTML(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        }[ch]));
+    }
 
     function stop(showToast = true) {
         active = false;
         ctx.controller.setMode("emotion", false);
         cancelAnimationFrame(rafId);
-        if (stream) {
-            ctx.controller.stopStream(stream);
-            stream = null;
-        }
-        if (videoEl) {
-            videoEl.remove();
-            videoEl = null;
-        }
+        if (stream) { ctx.controller.stopStream(stream); stream = null; }
+        if (videoEl) { videoEl.remove(); videoEl = null; }
         const canvas = document.getElementById("emotion-canvas");
         if (canvas) canvas.style.display = "none";
         ctx.setDot("dot-emotion", "");
         ctx.setControlState("btn-emotion", "");
+        if (window.cwUpdateEmotion) window.cwUpdateEmotion("OFFLINE", "offline");
         if (showToast) ctx.showToast("🎭 Emotion Engine Off");
     }
 
@@ -50,13 +56,16 @@ export function createEmotionEngine(ctx) {
                 canvasEl = document.getElementById("emotion-canvas");
                 canvasCtx = canvasEl.getContext("2d");
                 faceMesh = new window.FaceMesh({
-                    locateFile: (file) => new URL(file, "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/").toString()
+                    locateFile: (f) => {
+                        if (f.includes('hands')) return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`;
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`;
+                    }
                 });
                 faceMesh.setOptions({
                     maxNumFaces: 1,
-                    refineLandmarks: true,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
+                    refineLandmarks: false,
+                    minDetectionConfidence: 0.2,
+                    minTrackingConfidence: 0.2
                 });
                 faceMesh.onResults(onResults);
             }
@@ -107,10 +116,23 @@ export function createEmotionEngine(ctx) {
             const mouthSignal = (mouthH / (mouthW + 0.001)) > 0.15 ? Math.min(1, (mouthH / (mouthW + 0.001)) * 4) : 0;
             const confusionScore = (browSignal * 0.55) + (eyeSignal * 0.25) + (mouthSignal * 0.2);
             const confusionPct = Math.round(confusionScore * 100);
-            let label = "✅ Focused", color = "#34D399";
-            if (confusionScore > 0.55) { label = "😕 Confused"; color = "#FB7185"; confusionFrames++; }
-            else if (confusionScore > 0.3) { label = "🤔 Thinking"; color = "#F59E0B"; confusionFrames = Math.max(0, confusionFrames - 1); }
+            let label = "✅ Focused", color = "#34D399", cwState = "focused";
+            if (confusionScore > 0.55) { label = "😕 Confused"; color = "#FB7185"; cwState = "confused"; confusionFrames++; }
+            else if (confusionScore > 0.3) { label = "🤔 Thinking"; color = "#F59E0B"; cwState = "thinking"; confusionFrames = Math.max(0, confusionFrames - 1); }
             else { confusionFrames = Math.max(0, confusionFrames - 3); }
+            // Push to cognitive widget
+            if (window.cwUpdateEmotion) window.cwUpdateEmotion(label.replace(/^[^ ]+ /, ''), cwState);
+            const now = Date.now();
+            if (window.CogniViewTelemetry && now - lastTelemetryAt > 4500) {
+                lastTelemetryAt = now;
+                window.CogniViewTelemetry.recordEvent("emotion_sample", {
+                    signal: cwState,
+                    value: confusionPct,
+                    brow: Math.round(browSignal * 100),
+                    eye: Math.round(eyeSignal * 100),
+                    mouth: Math.round(mouthSignal * 100)
+                });
+            }
             canvasCtx.fillStyle = "rgba(0,0,0,0.75)";
             canvasCtx.fillRect(6, 6, 210, 26);
             canvasCtx.fillStyle = color;
@@ -132,6 +154,10 @@ export function createEmotionEngine(ctx) {
         confusionFrames = 0;
         const vid = document.getElementById("vid");
         vid.pause();
+        window.CogniViewTelemetry?.recordEvent("emotion_intervention", {
+            signal: "confusion",
+            value: 1
+        });
         ctx.showToast("🧠 CONFUSION DETECTED");
         const c = document.getElementById("chat");
         c.innerHTML += `<div class="bubble ai" style="color:var(--red);">Analyzing facial expressions... High Cognitive Load detected. Asking AI for an explanation...</div>`;
@@ -143,7 +169,8 @@ export function createEmotionEngine(ctx) {
                 body: JSON.stringify({ timestamp: vid.currentTime })
             });
             const d = await r.json();
-            c.innerHTML += `<div class="bubble ai" style="border: 1px solid var(--red); box-shadow: 0 0 10px var(--red);">${(d.explanation || "").replace(/\n/g, "<br>")}</div>`;
+            const explanation = escapeHTML(d.explanation || "").replace(/\n/g, "<br>");
+            c.innerHTML += `<div class="bubble ai" style="border: 1px solid var(--red); box-shadow: 0 0 10px var(--red);">${explanation}</div>`;
         } catch (e) {
             c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`;
         }

@@ -6,13 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CogniView | Neural Interface</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-        crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
@@ -48,6 +46,66 @@
             padding: 12px 16px;
             height: 100vh;
             overflow: hidden;
+            --dashboard-main: 1.75fr;
+            --dashboard-side: 1fr;
+            --dashboard-side-min: 360px;
+            --dashboard-gap: 16px;
+            --stage-video-max: 450px;
+            --stage-title-size: clamp(1.3rem, 2vw, 2.2rem);
+            --stage-subtitle-size: 0.9rem;
+            --stage-overview-pad: 12px;
+            --tutor-header-size: 1.1rem;
+            --chat-padding: 18px;
+            --chat-input-pad: 20px;
+            --chat-outer-pad: 16px;
+            --bubble-font-size: 0.95rem;
+            --live-label-size: 0.62rem;
+            --live-strong-size: 0.92rem;
+            --tutor-card-pad: 12px;
+        }
+        body[data-dashboard-size="sm"] {
+            --dashboard-main: 1.55fr;
+            --dashboard-side: 1fr;
+            --dashboard-side-min: 320px;
+            --dashboard-gap: 12px;
+        }
+        body[data-dashboard-size="lg"] {
+            --dashboard-main: 1.95fr;
+            --dashboard-side: 1.08fr;
+            --dashboard-side-min: 400px;
+            --dashboard-gap: 20px;
+        }
+        body[data-stage-size="sm"] {
+            --stage-video-max: 390px;
+            --stage-title-size: clamp(1.15rem, 1.8vw, 1.85rem);
+            --stage-subtitle-size: 0.83rem;
+            --stage-overview-pad: 10px;
+        }
+        body[data-stage-size="lg"] {
+            --stage-video-max: 540px;
+            --stage-title-size: clamp(1.55rem, 2.35vw, 2.65rem);
+            --stage-subtitle-size: 0.98rem;
+            --stage-overview-pad: 14px;
+        }
+        body[data-tutor-size="sm"] {
+            --tutor-header-size: 1rem;
+            --chat-padding: 14px;
+            --chat-input-pad: 16px;
+            --chat-outer-pad: 12px;
+            --bubble-font-size: 0.88rem;
+            --live-label-size: 0.58rem;
+            --live-strong-size: 0.86rem;
+            --tutor-card-pad: 10px;
+        }
+        body[data-tutor-size="lg"] {
+            --tutor-header-size: 1.18rem;
+            --chat-padding: 22px;
+            --chat-input-pad: 22px;
+            --chat-outer-pad: 18px;
+            --bubble-font-size: 1rem;
+            --live-label-size: 0.66rem;
+            --live-strong-size: 0.98rem;
+            --tutor-card-pad: 14px;
         }
 
         /* Subtle grid + orbs (inspired shell) */
@@ -79,13 +137,39 @@
 
         .container {
             display: grid;
-            grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1fr);
-            gap: 16px;
+            grid-template-columns: minmax(0, var(--dashboard-main)) minmax(var(--dashboard-side-min), var(--dashboard-side));
+            gap: var(--dashboard-gap);
             height: calc(100% - 56px);
             max-width: 1800px;
             margin: 0 auto;
             position: relative;
             z-index: 1;
+        }
+        .panel-splitter {
+            display: none;
+            position: relative;
+            width: 12px;
+            border-radius: 999px;
+            cursor: col-resize;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(148,163,184,0.12);
+            align-self: stretch;
+        }
+        .panel-splitter::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 64px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(200,255,0,0.18), rgba(168,85,247,0.52), rgba(200,255,0,0.18));
+        }
+        .dragging,
+        .dragging * {
+            user-select: none !important;
+            cursor: grabbing !important;
         }
 
         /* TOP BAR */
@@ -120,6 +204,93 @@
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px;
         }
         .topbar-right { display:flex; align-items:center; gap:8px; }
+        .topbar-action {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .topbar-action:hover {
+            color: var(--text-primary);
+            border-color: rgba(200,255,0,0.32);
+            background: rgba(200,255,0,0.08);
+        }
+        .size-console {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            padding: 4px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(255,255,255,0.03);
+            backdrop-filter: blur(10px);
+        }
+        .size-console-note {
+            color: var(--text-secondary);
+            font-size: 0.68rem;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 0 6px 0 2px;
+        }
+        .size-cluster {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 4px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.18);
+        }
+        .size-label {
+            color: var(--text-secondary);
+            font-size: 0.68rem;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 0 4px;
+        }
+        .size-btn,
+        .size-reset {
+            border: 1px solid rgba(148,163,184,0.14);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+            font-weight: 800;
+        }
+        .size-btn {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            line-height: 1;
+        }
+        .size-reset {
+            padding: 5px 9px;
+            font-size: 0.7rem;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
+        .size-btn:hover,
+        .size-reset:hover {
+            color: var(--accent);
+            border-color: rgba(200,255,0,0.32);
+            background: rgba(200,255,0,0.08);
+        }
+        .size-value {
+            min-width: 22px;
+            text-align: center;
+            color: var(--accent);
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
         .feat-dot {
             display:flex; align-items:center; gap:5px;
             font-size:0.72rem; font-weight:600; letter-spacing:1px;
@@ -154,12 +325,393 @@
             border-bottom: 1px solid var(--border);
             position: relative;
             transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+            overflow: hidden;
+        }
+        .video-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(6,7,10,0.08) 0%, rgba(6,7,10,0) 35%, rgba(6,7,10,0.68) 100%);
+        }
+        .stage-resizer {
+            height: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: row-resize;
+            background: linear-gradient(180deg, rgba(8,11,18,0.94), rgba(10,15,28,0.88));
+            border-top: 1px solid rgba(148,163,184,0.08);
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+        }
+        .stage-resizer::before {
+            content: "";
+            width: 72px;
+            height: 4px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(200,255,0,0.18), rgba(168,85,247,0.5), rgba(200,255,0,0.18));
+        }
+        .drag-guide {
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+            line-height: 1.4;
+        }
+        .stage-head {
+            position: absolute;
+            inset: 18px 18px auto 18px;
+            z-index: 3;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .stage-title-wrap {
+            max-width: min(68%, 760px);
+            display: grid;
+            gap: 8px;
+        }
+        .stage-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(6,7,10,0.46);
+            padding: 6px 10px;
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            backdrop-filter: blur(10px);
+        }
+        .stage-title {
+            margin: 0;
+            font-size: var(--stage-title-size);
+            line-height: 1.05;
+            color: white;
+            text-shadow: 0 10px 24px rgba(0,0,0,0.35);
+        }
+        .stage-subtitle {
+            color: rgba(241,245,249,0.78);
+            max-width: 56ch;
+            font-size: var(--stage-subtitle-size);
+            line-height: 1.45;
+        }
+        .stage-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .stage-pill {
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-primary);
+            font-size: 0.76rem;
+            backdrop-filter: blur(8px);
+        }
+        .stage-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            position: relative;
+            z-index: 4;
+        }
+        .stage-btn {
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(6,7,10,0.42);
+            color: white;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: 0.2s;
+        }
+        .stage-btn:hover {
+            border-color: rgba(200,255,0,0.35);
+            color: var(--accent);
+        }
+        .stage-overview {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            padding: 14px 16px 16px;
+            background: linear-gradient(180deg, rgba(8,11,18,0.96), rgba(10,15,28,0.9));
+            border-top: 1px solid rgba(148,163,184,0.08);
+        }
+        .overview-card {
+            background: rgba(255,255,255,0.035);
+            border: 1px solid rgba(148,163,184,0.12);
+            border-radius: 12px;
+            padding: var(--stage-overview-pad);
+            display: grid;
+            gap: 6px;
+        }
+        .overview-card span {
+            font-size: 0.68rem;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .overview-card strong {
+            font-size: 1.05rem;
+            color: var(--text-primary);
+        }
+        .overview-card p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            line-height: 1.35;
+        }
+        .command-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+            padding: 0 16px 16px;
+            background: linear-gradient(180deg, rgba(8,11,18,0.96), rgba(10,15,28,0.9));
+        }
+        .command-card {
+            border: 1px solid rgba(148,163,184,0.12);
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(255,255,255,0.03);
+            display: grid;
+            gap: 8px;
+            min-height: 112px;
+        }
+        .command-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .command-card strong {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+        .command-card p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+        .command-key {
+            border-radius: 999px;
+            border: 1px solid rgba(6,182,212,0.24);
+            background: rgba(6,182,212,0.08);
+            color: var(--accent);
+            padding: 4px 8px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+        .command-trigger {
+            border: 1px solid rgba(148,163,184,0.14);
+            background: rgba(255,255,255,0.045);
+            color: var(--text-primary);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            width: fit-content;
+        }
+        .command-trigger:hover {
+            border-color: rgba(200,255,0,0.32);
+            color: var(--accent);
+            background: rgba(200,255,0,0.08);
+        }
+        .quest-shell {
+            padding: 22px;
+            display: grid;
+            gap: 16px;
+        }
+        .quest-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
+            gap: 14px;
+        }
+        .quest-panel {
+            border: 1px solid rgba(148,163,184,0.14);
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(15,23,42,0.88), rgba(11,18,30,0.94));
+            padding: 16px;
+        }
+        .quest-kicker {
+            color: var(--accent);
+            font-size: 0.72rem;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .quest-title {
+            font-size: 1.35rem;
+            color: var(--text-primary);
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .quest-copy {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.5;
+            max-width: 56ch;
+        }
+        .quest-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .quest-badge {
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(148,163,184,0.16);
+            color: var(--text-primary);
+            font-size: 0.74rem;
+        }
+        .quest-scoreboard {
+            display: grid;
+            gap: 10px;
+        }
+        .quest-stat {
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(148,163,184,0.12);
+        }
+        .quest-stat span {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.68rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .quest-stat strong {
+            color: var(--text-primary);
+            font-size: 1.25rem;
+        }
+        .quest-progress {
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+        }
+        .quest-progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--accent), #34D399);
+            transition: width 0.25s ease;
+        }
+        .quest-card {
+            border-radius: 18px;
+            border: 1px solid rgba(200,255,0,0.18);
+            background: linear-gradient(135deg, rgba(200,255,0,0.06), rgba(168,85,247,0.06));
+            padding: 18px;
+            display: grid;
+            gap: 16px;
+        }
+        .quest-card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .quest-level {
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: var(--accent);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .quest-prompt {
+            color: var(--text-primary);
+            font-size: 1.08rem;
+            line-height: 1.5;
+            font-weight: 700;
+        }
+        .quest-option-list {
+            display: grid;
+            gap: 10px;
+        }
+        .quest-option {
+            width: 100%;
+            text-align: left;
+            border-radius: 12px;
+            border: 1px solid rgba(148,163,184,0.14);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+            padding: 12px 14px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .quest-option:hover {
+            border-color: rgba(200,255,0,0.28);
+            background: rgba(200,255,0,0.08);
+        }
+        .quest-feedback {
+            border-radius: 12px;
+            padding: 12px 14px;
+            border: 1px solid rgba(148,163,184,0.12);
+            background: rgba(0,0,0,0.2);
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+        .quest-feedback strong {
+            color: var(--text-primary);
+        }
+        .quest-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .quest-btn {
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.14);
+            background: rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            padding: 9px 12px;
+            font-size: 0.8rem;
+            font-family: inherit;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .quest-btn.primary {
+            background: var(--accent);
+            border-color: transparent;
+            color: #0B0E14;
+        }
+        .quest-empty {
+            border-radius: 18px;
+            border: 1px dashed rgba(148,163,184,0.2);
+            padding: 24px;
+            text-align: center;
+            color: var(--text-secondary);
         }
 
         video {
             width: 100%;
             display: block;
-            max-height: 450px;
+            max-height: var(--stage-video-max);
         }
 
         body.video-docked .video-container {
@@ -187,6 +739,10 @@
             gap: 10px;
             flex-wrap: wrap;
             background: rgba(15, 23, 42, 0.8);
+            position: sticky;
+            top: 0;
+            z-index: 4;
+            backdrop-filter: blur(16px);
         }
 
         .nav-pill {
@@ -221,6 +777,42 @@
             scrollbar-width: thin;
             scrollbar-color: var(--accent) transparent;
         }
+        .content-shell {
+            padding: 22px;
+            display: grid;
+            gap: 12px;
+        }
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        .section-head h3 {
+            margin: 0;
+            font-size: 1rem;
+            letter-spacing: 0.3px;
+            color: var(--text-primary);
+        }
+        .section-head p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+        .section-meta {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+        .meta-chip {
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(148,163,184,0.14);
+        }
 
         .hidden {
             display: none !important;
@@ -228,20 +820,23 @@
 
         /* LIST ITEMS */
         .list-row {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border);
+            padding: 14px 16px;
+            border: 1px solid rgba(148,163,184,0.1);
+            border-radius: 12px;
             display: flex;
             gap: 15px;
             cursor: pointer;
             transition: 0.2s;
             color: var(--text-secondary);
             align-items: center;
+            background: rgba(255,255,255,0.025);
         }
 
         .list-row:hover {
-            background: rgba(6, 182, 212, 0.05);
+            background: rgba(6, 182, 212, 0.08);
             color: white;
-            padding-left: 25px;
+            transform: translateX(4px);
+            border-color: rgba(200,255,0,0.28);
         }
 
         .ts-badge {
@@ -256,10 +851,10 @@
 
         /* CHAT */
         .chat-header {
-            padding: 20px;
+            padding: 18px 20px;
             border-bottom: 1px solid var(--border);
             font-weight: 700;
-            font-size: 1.1rem;
+            font-size: var(--tutor-header-size);
             letter-spacing: 1px;
             display: flex;
             justify-content: space-between;
@@ -267,10 +862,41 @@
             color: var(--accent);
             text-transform: uppercase;
         }
+        .chat-subbar {
+            padding: 12px var(--chat-outer-pad) 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .status-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .status-chip {
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.14);
+            background: rgba(255,255,255,0.035);
+            padding: 5px 9px;
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
+        .shortcut-copy {
+            color: var(--text-secondary);
+            font-size: 0.76rem;
+            line-height: 1.4;
+        }
+        .shortcut-copy strong {
+            color: var(--text-primary);
+        }
 
         .chat-scroll {
             flex: 1;
-            padding: 16px;
+            padding: var(--chat-padding);
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -282,7 +908,7 @@
             max-width: 85%;
             padding: 12px 18px;
             border-radius: 16px;
-            font-size: 0.95rem;
+            font-size: var(--bubble-font-size);
             line-height: 1.5;
             position: relative;
         }
@@ -308,7 +934,7 @@
         /* INPUTS */
         .chat-input-area,
         .note-input-container {
-            padding: 20px;
+            padding: var(--chat-input-pad);
             border-top: 1px solid var(--border);
             display: flex;
             gap: 12px;
@@ -389,9 +1015,18 @@
                 height: auto;
                 min-height: calc(100vh - 56px);
             }
+            .panel-splitter {
+                display: none !important;
+            }
             .panel { min-height: 45vh; }
             body.video-docked .video-container {
                 width: min(52vw, 420px);
+            }
+            .stage-overview {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .command-strip {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -401,6 +1036,41 @@
                 min-width: 0;
                 right: 12px;
                 bottom: 12px;
+            }
+            .topbar {
+                height: auto;
+                align-items: flex-start;
+            }
+            .topbar-right {
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+            .size-console {
+                width: 100%;
+                justify-content: flex-end;
+            }
+            .stage-head {
+                position: relative;
+                inset: auto;
+                padding: 18px 18px 0;
+                flex-direction: column;
+            }
+            .stage-title-wrap {
+                max-width: 100%;
+            }
+            .stage-actions {
+                justify-content: flex-start;
+            }
+            .stage-overview {
+                grid-template-columns: 1fr;
+            }
+            .command-strip {
+                grid-template-columns: 1fr;
+            }
+            .nav-bar {
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                padding-bottom: 12px;
             }
         }
 
@@ -638,6 +1308,18 @@
             border-color: var(--accent);
         }
 
+        .chat-container { display:flex; flex-direction:column; height:100%; position:relative; overflow:hidden; }
+
+        /* AUTOPILOT POPUP */
+        #autopilot-popup {
+            position:absolute; top:20px; left:50%; transform:translateX(-50%);
+            background:rgba(15,23,42,0.9); border:1px solid var(--accent); border-radius:12px;
+            padding:12px 24px; color:var(--text-primary); font-size:0.9rem; font-weight:600;
+            display:flex; align-items:center; gap:12px; z-index:100; opacity:0; pointer-events:none;
+            transition:opacity 0.3s; box-shadow:0 0 20px rgba(6,182,212,0.3); backdrop-filter:blur(8px);
+        }
+        #autopilot-popup.show { opacity:1; }
+
         /* COGNITIVE HUD */
         #hud-layer {
             position: absolute;
@@ -755,17 +1437,211 @@
         .key-terms-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
         .term-card { background:rgba(168,85,247,0.07); border:1px solid rgba(168,85,247,0.2); border-radius:12px; padding:14px; }
         .term-name { font-weight:700; color:#A855F7; font-size:0.88rem; margin-bottom:6px; }
+        .accordion-item { background:rgba(15,23,42,0.6); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+        .accordion-header { padding:16px 20px; font-weight:600; font-size:0.95rem; color:var(--text-primary); cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02); transition:0.2s; }
+        .accordion-header:hover { background:rgba(6,182,212,0.05); }
+        .accordion-header.active { border-bottom:1px solid var(--border); color:var(--accent); }
+        .accordion-content { padding:0 20px; max-height:0; overflow:hidden; transition:max-height 0.3s ease-out; background:rgba(0,0,0,0.15); color:var(--text-secondary); font-size:0.9rem; line-height:1.6; }
+        .acc-icon { transition:transform 0.3s; font-size:0.75rem; }
         .term-def { font-size:0.8rem; color:var(--text-secondary); line-height:1.4; }
         .difficulty-badge { display:inline-flex; align-items:center; gap:8px; padding:7px 16px; border-radius:20px; font-weight:700; font-size:0.82rem; letter-spacing:1px; }
         .diff-Beginner { background:rgba(52,211,153,0.15); color:#34D399; border:1px solid rgba(52,211,153,0.3); }
         .diff-Intermediate { background:rgba(245,158,11,0.15); color:#F59E0B; border:1px solid rgba(245,158,11,0.3); }
         .diff-Advanced { background:rgba(251,113,133,0.15); color:#FB7185; border:1px solid rgba(251,113,133,0.3); }
         .topic-tag { display:inline-block; padding:5px 12px; border-radius:20px; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.2); color:var(--accent); font-size:0.78rem; font-weight:600; margin:4px; }
+
+
+
+        /* ── COGNITIVE WIDGET ─────────────────────────────────────────── */
+        #cogni-widget {
+            position:fixed; bottom:24px; left:24px; width:218px;
+            background:linear-gradient(145deg,rgba(6,7,10,0.97),rgba(15,23,42,0.96));
+            border:1px solid rgba(148,163,184,0.15); border-radius:18px;
+            backdrop-filter:blur(22px); z-index:400; padding:14px 16px;
+            display:none; flex-direction:column; gap:10px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.55),0 0 0 1px rgba(200,255,0,0.04);
+        }
+        #cogni-widget.show { display:flex; animation:cwSlideUp 0.3s ease; }
+        @keyframes cwSlideUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+        .cw-head { display:flex; align-items:center; justify-content:space-between; }
+        .cw-title { font-size:0.62rem; letter-spacing:2.5px; text-transform:uppercase; color:var(--accent); font-weight:700; }
+        .cw-timer { font-family:monospace; font-size:0.7rem; color:var(--text-secondary); letter-spacing:1px; }
+        .cw-ring-row { display:flex; align-items:center; gap:12px; }
+        .cw-ring { position:relative; width:56px; height:56px; flex-shrink:0; }
+        .cw-ring svg { transform:rotate(-90deg); width:56px; height:56px; }
+        .cw-ring-bg { fill:none; stroke:rgba(255,255,255,0.06); stroke-width:4.5; }
+        .cw-ring-fill { fill:none; stroke:var(--accent); stroke-width:4.5; stroke-linecap:round; stroke-dasharray:144; stroke-dashoffset:144; transition:stroke-dashoffset 0.7s ease,stroke 0.4s; filter:drop-shadow(0 0 5px var(--accent)); }
+        .cw-ring-num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:800; color:var(--accent); font-family:monospace; }
+        .cw-stats { flex:1; display:flex; flex-direction:column; gap:5px; }
+        .cw-stat { display:flex; align-items:center; justify-content:space-between; font-size:0.72rem; }
+        .cw-label { color:var(--text-secondary); }
+        .cw-val { font-weight:700; font-family:monospace; color:var(--text-primary); }
+        .cw-sep { height:1px; background:var(--border); }
+        .cw-emotion-row { display:flex; align-items:center; justify-content:space-between; font-size:0.72rem; }
+        .cw-emotion-row span:first-child { color:var(--text-secondary); }
+        .ec { padding:2px 9px; border-radius:20px; font-size:0.67rem; font-weight:700; letter-spacing:0.5px; }
+        .ec.focused { background:rgba(52,211,153,0.15); color:#34D399; border:1px solid rgba(52,211,153,0.3); }
+        .ec.thinking { background:rgba(245,158,11,0.15); color:#F59E0B; border:1px solid rgba(245,158,11,0.3); }
+        .ec.confused { background:rgba(251,113,133,0.15); color:#FB7185; border:1px solid rgba(251,113,133,0.3); }
+        .ec.offline { background:rgba(148,163,184,0.08); color:var(--text-secondary); border:1px solid var(--border); }
+
+        /* ── NAV TABS ENHANCED ────────────────────────────────────────── */
+        .nav-bar { position:relative; overflow-x:auto; scrollbar-width:none; flex-wrap:nowrap !important; }
+        .nav-bar::-webkit-scrollbar { display:none; }
+        .nav-tab-indicator {
+            position:absolute; bottom:0; height:2px;
+            background:linear-gradient(90deg,var(--accent),var(--accent2));
+            border-radius:2px; transition:left 0.3s cubic-bezier(.4,0,.2,1),width 0.3s cubic-bezier(.4,0,.2,1);
+            pointer-events:none;
+        }
+
+        /* ── TYPING INDICATOR ─────────────────────────────────────────── */
+        .typing-bubble { display:flex; align-items:center; gap:5px; padding:12px 16px; background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.8)); border:1px solid rgba(148,163,184,0.12); border-radius:16px; border-bottom-left-radius:4px; align-self:flex-start; }
+        .typing-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:tBounce 1.4s ease-in-out infinite; }
+        .typing-dot:nth-child(2){animation-delay:0.2s} .typing-dot:nth-child(3){animation-delay:0.4s}
+        @keyframes tBounce { 0%,60%,100%{transform:translateY(0);opacity:0.35} 30%{transform:translateY(-7px);opacity:1} }
+
+        /* ── CHAT BUBBLE PREMIUM ──────────────────────────────────────── */
+        .bubble.ai { border-left:2px solid rgba(6,182,212,0.35) !important; }
+
+        /* ── FOCUS OVERLAY REDESIGN ───────────────────────────────────── */
+        #focus-overlay { background:transparent !important; backdrop-filter:blur(14px) saturate(0.6) !important; }
+        #focus-overlay::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse at center,rgba(251,113,133,0.18) 0%,rgba(0,0,0,0.88) 65%); pointer-events:none; z-index:0; }
+        #focus-overlay::after { content:''; position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(251,113,133,0.04) 3px,rgba(251,113,133,0.04) 4px); pointer-events:none; z-index:0; animation:scanl 10s linear infinite; }
+        @keyframes scanl { from{background-position:0 0} to{background-position:0 200px} }
+        .focus-alert { z-index:1; font-size:2.4rem !important; animation:faPulse 0.9s ease-in-out infinite !important; }
+        @keyframes faPulse { 0%,100%{text-shadow:0 0 30px var(--red),0 0 60px var(--red)} 50%{text-shadow:0 0 60px var(--red),0 0 100px var(--red),0 0 140px var(--red)} }
+        #focus-overlay > div:not(.focus-alert) { z-index:1; position:relative; }
+
+        /* ── CALIBRATION DOT PULSE ────────────────────────────────────── */
+        .calibration-dot::after { content:''; position:absolute; inset:-5px; border-radius:50%; border:2px solid var(--accent); animation:calPulse 1.6s ease-out infinite; }
+        @keyframes calPulse { 0%{transform:scale(1);opacity:0.9} 100%{transform:scale(2.2);opacity:0} }
+
+        /* ── TOPBAR ENHANCEMENTS ──────────────────────────────────────── */
+        .topbar { border-bottom:1px solid rgba(200,255,0,0.06) !important; }
+        .topbar-logo { animation:logoPulse 4s ease-in-out infinite; }
+        @keyframes logoPulse { 0%,100%{filter:drop-shadow(0 0 6px rgba(200,255,0,0.3))} 50%{filter:drop-shadow(0 0 14px rgba(200,255,0,0.6))} }
+
+        /* ── PANEL LEFT ACCENT ────────────────────────────────────────── */
+        .panel { border-left:1px solid rgba(200,255,0,0.08) !important; }
+        .panel:hover { border-left-color:rgba(200,255,0,0.18) !important; }
+
+        .pulse-shell { padding: 18px; display: grid; gap: 14px; }
+        .pulse-hero { display: grid; grid-template-columns: minmax(160px, 0.7fr) minmax(240px, 1.3fr); gap: 16px; align-items: stretch; }
+        .pulse-meter, .pulse-panel { background: rgba(255,255,255,0.035); border: 1px solid rgba(148,163,184,0.14); border-radius: 12px; padding: 16px; }
+        .pulse-score { font-size: 3.2rem; font-weight: 900; color: var(--accent); line-height: 1; text-shadow: var(--accent-glow); }
+        .pulse-label { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+        .pulse-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px; }
+        .pulse-stat { background: rgba(0,0,0,0.22); border: 1px solid rgba(148,163,184,0.1); border-radius: 10px; padding: 12px; }
+        .pulse-stat strong { display: block; color: var(--text-primary); font-size: 1.25rem; }
+        .pulse-stat span { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; }
+        .pulse-bars { display: grid; gap: 9px; }
+        .pulse-bar-row { display: grid; grid-template-columns: 90px 1fr 48px; gap: 10px; align-items: center; color: var(--text-secondary); font-size: 0.8rem; }
+        .pulse-track { height: 8px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
+        .pulse-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: inherit; }
+        .pulse-list { display: grid; gap: 8px; color: var(--text-secondary); line-height: 1.45; font-size: 0.9rem; }
+        .pulse-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .pulse-chip { border: 1px solid rgba(200,255,0,0.24); background: rgba(200,255,0,0.07); color: var(--accent); border-radius: 999px; padding: 5px 9px; font-size: 0.75rem; }
+        .pulse-timeline { display: grid; gap: 8px; }
+        .pulse-time { display: grid; grid-template-columns: 56px 1fr; gap: 10px; color: var(--text-secondary); font-size: 0.82rem; }
+        .pulse-time button { border: 1px solid rgba(200,255,0,0.25); color: var(--accent); background: rgba(200,255,0,0.06); border-radius: 8px; cursor: pointer; font-family: inherit; }
+        .live-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px var(--chat-outer-pad) 0; }
+        .live-cell { border: 1px solid rgba(148,163,184,0.12); background: rgba(255,255,255,0.035); border-radius: 10px; padding: 9px; }
+        .live-cell span { display: block; color: var(--text-secondary); font-size: var(--live-label-size); text-transform: uppercase; letter-spacing: 1px; }
+        .live-cell strong { color: var(--text-primary); font-size: var(--live-strong-size); }
+        .autopilot-tutor {
+            margin: 10px var(--chat-outer-pad) 0;
+            border: 1px solid rgba(200,255,0,0.18);
+            background: linear-gradient(135deg, rgba(200,255,0,0.06), rgba(168,85,247,0.06));
+            border-radius: 12px;
+            padding: var(--tutor-card-pad);
+            display: grid;
+            gap: 10px;
+        }
+        .tutor-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            color: var(--accent);
+            font-weight: 800;
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .tutor-body {
+            color: var(--text-secondary);
+            line-height: 1.45;
+            font-size: 0.86rem;
+        }
+        .tutor-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tutor-btn {
+            border: 1px solid rgba(148,163,184,0.16);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-family: inherit;
+            font-size: 0.78rem;
+            cursor: pointer;
+        }
+        .tutor-btn.primary {
+            background: var(--accent);
+            color: #0B0E14;
+            border-color: transparent;
+            font-weight: 800;
+        }
+        .event-feed {
+            display: grid;
+            gap: 8px;
+            max-height: 170px;
+            overflow: auto;
+        }
+        .event-row {
+            display: grid;
+            grid-template-columns: 72px 1fr;
+            gap: 8px;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+            padding-bottom: 7px;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+        }
+        .event-row strong { color: var(--accent); font-size: 0.72rem; }
+        .mastery-row {
+            display: grid;
+            grid-template-columns: 1fr 46px;
+            gap: 8px;
+            align-items: center;
+            margin: 8px 0;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+        .mastery-track {
+            height: 7px;
+            border-radius: 99px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+            margin-top: 4px;
+        }
+        .mastery-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #FB7185, #F59E0B, #34D399);
+        }
+        @media (max-width: 760px) {
+            .pulse-hero { grid-template-columns: 1fr; }
+            .live-strip { grid-template-columns: 1fr; }
+        }
     </style>
 
 </head>
 
-<body>
+<body data-dashboard-size="md" data-stage-size="md" data-tutor-size="md">
     <div class="bg-grid"></div>
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
@@ -780,12 +1656,40 @@
             <div class="feat-dot" id="dot-focus"><div class="dot"></div>FOCUS</div>
             <div class="feat-dot" id="dot-emotion"><div class="dot"></div>EMOTION</div>
             <div class="feat-dot" id="dot-gesture"><div class="dot"></div>GESTURE</div>
-            <a href="/" style="text-decoration:none;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-secondary);padding:5px 14px;border-radius:8px;font-size:0.78rem;font-weight:600;">← Library</a>
+            <div style="font-family:monospace;font-size:0.72rem;color:var(--text-secondary);padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,0.03)" id="session-timer">00:00</div>
+            <div class="size-console" aria-label="Module sizing console">
+                <span class="size-console-note">Drag center divider and stage rail</span>
+                <button class="size-reset" onclick="resetModuleSizing()" title="Reset module sizing">Reset Layout</button>
+            </div>
+
+            <button class="topbar-action" onclick="toggleCogniWidget()" title="Cognitive Widget">Panel</button>
+            <button class="topbar-action" onclick="openQuestTab()" title="Quest Mode">Game</button>
+            <a href="/" class="topbar-action">Library</a>
         </div>
     </div>
     <div class="container">
-        <div class="panel">
+        <div class="left-col" style="display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+            <div class="panel">
             <div class="video-container">
+                <div id="autopilot-popup">🧠 Autopilot: Biometric feedback active</div>
+                <div class="stage-head">
+                    <div class="stage-title-wrap">
+                        <div class="stage-kicker">Cognitive Lecture Stage</div>
+                        <h1 class="stage-title">{{ video_title }}</h1>
+                        <div class="stage-subtitle">Live study cockpit with cognitive telemetry, guided interventions, and multi-format understanding tools built around this lecture.</div>
+                        <div class="stage-pills">
+                            <span class="stage-pill">{{ segments|length }} transcript anchors</span>
+                            <span class="stage-pill">{{ slides|length }} visual captures</span>
+                            <span class="stage-pill">Autopilot tutor ready</span>
+                        </div>
+                    </div>
+                    <div class="stage-actions">
+                        <button class="stage-btn" onclick="openPulseTab()">Open Pulse</button>
+                        <button class="stage-btn" onclick="openQuizTab()">Run Quiz</button>
+                        <button class="stage-btn" onclick="openQuestTab()">Quest Mode</button>
+                        <button class="stage-btn" onclick="toggleVideoDock()">Dock Video</button>
+                    </div>
+                </div>
                 <video id="vid" controls>
                     <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
                 </video>
@@ -804,31 +1708,140 @@
                 <canvas id="emotion-canvas" width="320" height="240"
                     style="position: absolute; bottom: 10px; left: 10px; width: 220px; height: 165px; border-radius: 10px; border: 2px solid var(--red); opacity: 0.95; display: none; box-shadow: 0 0 20px rgba(251,113,133,0.3);"></canvas>
             </div>
+            <div class="stage-resizer" id="stage-resizer" title="Drag to resize lecture stage"></div>
+            <div class="stage-overview">
+                <div class="overview-card">
+                    <span>Playback</span>
+                    <strong id="overview-playback">00:00</strong>
+                    <p>Current lecture position for live tutoring and notes.</p>
+                </div>
+                <div class="overview-card">
+                    <span>Mode</span>
+                    <strong id="overview-mode">Manual</strong>
+                    <p>Switches automatically as cognitive modules engage.</p>
+                </div>
+                <div class="overview-card">
+                    <span>Active Lens</span>
+                    <strong id="overview-emotion">Focused</strong>
+                    <p>Latest emotional or cognitive state observed.</p>
+                </div>
+                <div class="overview-card">
+                    <span>Session Goal</span>
+                    <strong>Present clearly</strong>
+                    <p>Keep the demo flowing, then jump into Pulse and Quiz.</p>
+                </div>
+            </div>
+            <div class="command-strip">
+                <div class="command-card">
+                    <div class="command-meta">
+                        <strong>Pulse Review</strong>
+                        <span class="command-key">2</span>
+                    </div>
+                    <p>Open the cognitive profile fast when you want the strongest proof of system intelligence.</p>
+                    <button class="command-trigger" onclick="openPulseTab()">Open Pulse</button>
+                </div>
+                <div class="command-card">
+                    <div class="command-meta">
+                        <strong>Mastery Check</strong>
+                        <span class="command-key">4</span>
+                    </div>
+                    <p>Jump straight into quiz generation to show adaptive assessment without digging through tabs.</p>
+                    <button class="command-trigger" onclick="openQuizTab()">Run Quiz</button>
+                </div>
+                <div class="command-card">
+                    <div class="command-meta">
+                        <strong>Capture Note</strong>
+                        <span class="command-key">N</span>
+                    </div>
+                    <p>Seed a timestamped note instantly so you can save a talking point while the lecture is moving.</p>
+                    <button class="command-trigger" onclick="seedTimestampNote()">Add Note</button>
+                </div>
+                <div class="command-card">
+                    <div class="command-meta">
+                        <strong>Focus Query</strong>
+                        <span class="command-key">/</span>
+                    </div>
+                    <p>Move straight into the tutor input so the Q and A part of the demo feels quick and intentional.</p>
+                    <button class="command-trigger" onclick="focusQueryInput()">Focus Chat</button>
+                </div>
+                <div class="command-card">
+                    <div class="command-meta">
+                        <strong>Kid Quest</strong>
+                        <span class="command-key">9</span>
+                    </div>
+                    <p>Turn the lesson into a guided mini game with lives, stars, and instant coaching for a child learner.</p>
+                    <button class="command-trigger" onclick="openQuestTab()">Start Quest</button>
+                </div>
+            </div>
         </div>
-        <div class="nav-bar">
-            <button class="nav-pill active" onclick="tab('transcript', this)">Transcript</button>
-            <button class="nav-pill" onclick="tab('notes', this); loadNotes();">📝 Notes</button>
-            <button class="nav-pill" onclick="tab('slides', this)">Slides ({{ slides|length }})</button>
-            <button class="nav-pill" onclick="chapters(this)">Smart Chapters</button>
-            <button class="nav-pill" onclick="quiz(this)">AI Quiz</button>
-            <button class="nav-pill" onclick="summaryTab(this)">⚡ Summary</button>
-            <button class="nav-pill" onclick="flashcardsTab(this)">🃏 Flashcards</button>
-            <button class="nav-pill" onclick="podcast(this)">🎙️ Neural Podcast</button>
-            <button class="nav-pill" onclick="mindmap(this)">🧠 Mind Map</button>
+        <div class="nav-bar" id="nav-bar">
+            <div class="nav-tab-indicator" id="nav-indicator"></div>
+            <button class="nav-pill active" data-tab="transcript" onclick="tab('transcript', this)">📄 Transcript</button>
+            <button class="nav-pill" data-tab="pulse" onclick="pulseTab(this)">Pulse</button>
+            <button class="nav-pill" data-tab="quest" onclick="gameModeTab(this)">Quest</button>
+            <button class="nav-pill" data-tab="notes" onclick="tab('notes', this); loadNotes();">📝 Notes</button>
+            <button class="nav-pill" data-tab="slides" onclick="tab('slides', this)">🖼 Slides ({{ slides|length }})</button>
+            <button class="nav-pill" data-tab="chapters" onclick="chapters(this)">🎯 Chapters</button>
+            <button class="nav-pill" data-tab="quiz" onclick="quiz(this)">🧩 Quiz</button>
+            <button class="nav-pill" data-tab="summary" onclick="summaryTab(this)">⚡ Summary</button>
+            <button class="nav-pill" data-tab="flashcards" onclick="flashcardsTab(this)">🃏 Flashcards</button>
+            <button class="nav-pill" data-tab="podcast" onclick="podcast(this)">🎙️ Podcast</button>
+            <button class="nav-pill" data-tab="mindmap" onclick="mindmap(this)">🧠 Mind Map</button>
         </div>
 
         <div id="transcript" class="content-area">
-            {% for s in segments %}
-            <div class="list-row" onclick="jump({{ s.start }})">
-                <span class="ts-badge">{{ (s.start // 60) | int }}:{{ '%02d' % (s.start % 60 | int) }}</span>
-                <span>{{ s.text }}</span>
+            <div class="content-shell">
+                <div class="section-head">
+                    <div>
+                        <h3>Transcript Timeline</h3>
+                        <p>Jump between spoken ideas instantly during the presentation.</p>
+                    </div>
+                    <div class="section-meta">
+                        <span class="meta-chip">{{ segments|length }} moments</span>
+                        <span class="meta-chip">Click to sync video</span>
+                    </div>
+                </div>
+                {% for s in segments %}
+                <div class="list-row" onclick="jump({{ s.start }})">
+                    <span class="ts-badge">{{ (s.start // 60) | int }}:{{ '%02d' % (s.start % 60 | int) }}</span>
+                    <span>{{ s.text }}</span>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
+        </div>
+
+        <div id="pulse" class="content-area hidden">
+            <div id="pulse-inner" class="pulse-shell">
+                <div class="summary-loading">
+                    <div class="spinner-ring"></div>
+                    <div style="color:var(--accent);font-family:monospace;letter-spacing:2px;">BUILDING COGNITIVE PROFILE...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="quest" class="content-area hidden">
+            <div id="quest-shell" class="quest-shell">
+                <div class="quest-empty">
+                    <div style="font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:8px;">Quest Mode is ready</div>
+                    <div>Open this tab to turn the lecture into a child-friendly learning game with hearts, score, and guided feedback.</div>
+                </div>
+            </div>
         </div>
 
         <div id="notes" class="content-area hidden">
-            <div id="notes-list" style="padding-top: 10px;"></div>
-            <div style="height: 80px;"></div>
+            <div class="content-shell" style="padding-bottom: 104px;">
+                <div class="section-head">
+                    <div>
+                        <h3>Notes Studio</h3>
+                        <p>Capture presentable talking points and timestamped revision notes.</p>
+                    </div>
+                    <div class="section-meta">
+                        <span class="meta-chip">Timestamp aware</span>
+                        <span class="meta-chip">Saved to session</span>
+                    </div>
+                </div>
+                <div id="notes-list" style="padding-top: 10px;"></div>
+            </div>
             <div class="note-input-container" style="position: absolute; bottom: 0; width: 100%;">
                 <input type="text" id="noteInput" class="ios-input"
                     placeholder="Add a note (e.g. 'Important for exam')..."
@@ -838,7 +1851,19 @@
         </div>
 
         <div id="slides" class="content-area hidden">
-            <div class="grid">
+            <div class="content-shell">
+                <div class="section-head">
+                    <div>
+                        <h3>Slide Gallery</h3>
+                        <p>Open visual captures quickly when you want concrete proof on screen.</p>
+                    </div>
+                    <div class="section-meta">
+                        <span class="meta-chip">{{ slides|length }} captures</span>
+                        <span class="meta-chip">Click to expand</span>
+                    </div>
+                </div>
+            </div>
+            <div class="grid" style="padding-top: 8px;">
                 {% for slide in slides %}
                 <div class="slide-thumb" onclick="window.open('{{ url_for('static', filename='slides/' + slide) }}')">
                     <img src="{{ url_for('static', filename='slides/' + slide) }}" loading="lazy">
@@ -847,10 +1872,32 @@
             </div>
         </div>
         <div id="chapters" class="content-area hidden">
-            <div id="ch-list" style="padding:20px;"></div>
+            <div class="content-shell">
+                <div class="section-head">
+                    <div>
+                        <h3>Chapter Map</h3>
+                        <p>Use generated segments to narrate the lecture arc with less scrolling.</p>
+                    </div>
+                    <div class="section-meta">
+                        <span class="meta-chip">Auto generated</span>
+                    </div>
+                </div>
+                <div id="ch-list" style="padding-top: 14px;"></div>
+            </div>
         </div>
         <div id="quiz" class="content-area hidden">
-            <div id="q-list" style="padding:20px;"></div>
+            <div class="content-shell">
+                <div class="section-head">
+                    <div>
+                        <h3>Mastery Check</h3>
+                        <p>Use micro-questions to show the adaptive learning loop in action.</p>
+                    </div>
+                    <div class="section-meta">
+                        <span class="meta-chip">Updates mastery</span>
+                    </div>
+                </div>
+                <div id="q-list" style="padding-top: 14px;"></div>
+            </div>
         </div>
 
         <!-- ─── SMART SUMMARY TAB ───────────────────────────────────────── -->
@@ -921,10 +1968,13 @@
             </div>
         </div>
 
-        <div class="panel">
+        </div>
+        <div class="panel-splitter" id="panel-splitter" title="Drag to resize dashboard panels"></div>
+
+        <div class="panel right-panel" id="right-panel">
             <div class="chat-header">
                 <span>CogniView Module</span>
-                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                     <select id="lang" class="lang-select">
                         <option value="en">EN</option>
                         <option value="es">ES</option>
@@ -934,12 +1984,40 @@
                     <button id="btn-matrix" class="icon-btn control-toggle" onclick="startMatrix()">⚡ SPEED</button>
                     <button id="btn-binaural" class="icon-btn control-toggle" onclick="toggleBinaural()">🧠 HERTZ</button>
                     <button id="btn-hud" class="icon-btn control-toggle" onclick="toggleHUD()">📊 HUD</button>
+                    <button id="btn-autopilot" class="icon-btn control-toggle" onclick="toggleAutopilot()">🧠 AUTOPILOT</button>
                     <button id="btn-focus" class="icon-btn control-toggle" onclick="toggleFocusGuard()">👁️ FOCUS</button>
                     <button id="btn-gesture" class="icon-btn control-toggle" onclick="toggleGestures()">🖐️ GESTURE</button>
                     <button id="btn-emotion" class="icon-btn control-toggle" onclick="toggleEmotion()">🎭 EMOTION</button>
                     <button id="btn-dock" class="icon-btn control-toggle" onclick="toggleVideoDock()">📺 DOCK</button>
                     <button class="icon-btn" onclick="listen()">🎧 AUDIO</button>
                     <button class="icon-btn" onclick="window.location.href='/get_pdf'">📄 PDF</button>
+                </div>
+            </div>
+            <div class="chat-subbar">
+                <div class="status-row">
+                    <span class="status-chip">Tutor loop ready</span>
+                    <span class="status-chip">Shortcuts active</span>
+                    <span class="status-chip">Presentation flow tuned</span>
+                    <span class="status-chip" id="size-summary-chip">Sizes D:M S:M T:M</span>
+                </div>
+                <div class="shortcut-copy"><strong>Keys:</strong> 1 Transcript, 2 Pulse, 3 Notes, 4 Quiz, 5 Slides, 9 Quest, N Note, / Chat</div>
+                <div class="drag-guide">Drag the center divider to resize left and right panels. Drag the bar under the video to resize the lecture stage.</div>
+            </div>
+            <div class="live-strip">
+                <div class="live-cell"><span>Focus</span><strong id="live-focus">OFF</strong></div>
+                <div class="live-cell"><span>Emotion</span><strong id="live-emotion">OFFLINE</strong></div>
+                <div class="live-cell"><span>Autopilot</span><strong id="live-autopilot">MANUAL</strong></div>
+            </div>
+            <div class="autopilot-tutor" id="autopilot-tutor">
+                <div class="tutor-head">
+                    <span>Autopilot Tutor</span>
+                    <span id="tutor-state">STANDBY</span>
+                </div>
+                <div class="tutor-body" id="tutor-body">Enable Autopilot to let CogniView pause, explain, check understanding, and update mastery when the cognitive modules detect friction.</div>
+                <div class="tutor-actions">
+                    <button class="tutor-btn primary" onclick="runAutopilotIntervention('manual_check')">Coach Now</button>
+                    <button class="tutor-btn" onclick="markTutorAnswer(true)">I got it</button>
+                    <button class="tutor-btn" onclick="markTutorAnswer(false)">Still weak</button>
                 </div>
             </div>
             <div id="chat" class="chat-scroll">
@@ -952,6 +2030,31 @@
                 <button class="btn-circle send-btn" onclick="send()">↑</button>
             </div>
             <audio id="audio" style="display:none"></audio>
+        </div>
+    </div>
+
+
+    <!-- COGNITIVE STATUS WIDGET -->
+    <div id="cogni-widget">
+        <div class="cw-head">
+            <div class="cw-title">Neural Status</div>
+            <div class="cw-timer" id="cw-timer">00:00</div>
+        </div>
+        <div class="cw-ring-row">
+            <div class="cw-ring">
+                <svg viewBox="0 0 56 56"><circle class="cw-ring-bg" cx="28" cy="28" r="23"/><circle class="cw-ring-fill" id="cw-ring-fill" cx="28" cy="28" r="23"/></svg>
+                <div class="cw-ring-num" id="cw-ring-num">--</div>
+            </div>
+            <div class="cw-stats">
+                <div class="cw-stat"><span class="cw-label">Focus</span><span class="cw-val" id="cw-focus">OFF</span></div>
+                <div class="cw-stat"><span class="cw-label">Session</span><span class="cw-val" id="cw-session">00:00</span></div>
+                <div class="cw-stat"><span class="cw-label">Alerts</span><span class="cw-val" id="cw-alerts">0</span></div>
+            </div>
+        </div>
+        <div class="cw-sep"></div>
+        <div class="cw-emotion-row">
+            <span>Emotion</span>
+            <span class="ec offline" id="cw-emotion-chip">OFFLINE</span>
         </div>
     </div>
 
@@ -994,17 +2097,29 @@
         document.addEventListener('DOMContentLoaded', () => {
             const el = document.getElementById('topbar-title');
             if (el) {
-                const t = document.title.replace('CogniView | ', '').replace('Neural Interface', '');
-                el.textContent = document.title.includes('|') ? document.title.split('|')[1].trim() : document.title;
+                el.textContent = {{ video_title|tojson }};
             }
+            const vid = document.getElementById('vid');
+            if (vid) {
+                const syncPlayback = () => {
+                    const playback = document.getElementById('overview-playback');
+                    if (playback) playback.textContent = formatSeconds(vid.currentTime || 0);
+                };
+                syncPlayback();
+                vid.addEventListener('timeupdate', syncPlayback);
+                vid.addEventListener('loadedmetadata', syncPlayback);
+            }
+            if (typeof renderLivePulse === 'function') {
+                renderLivePulse();
+            }
+            loadModuleSizing();
+            initDraggableLayout();
 
             // Restore last active tab
             try {
                 const last = localStorage.getItem('cogniview.lastTab');
                 if (last && document.getElementById(last)) {
-                    const btn = Array.from(document.querySelectorAll('.nav-pill')).find(b => (b.getAttribute('onclick') || '').includes(`tab('${last}'`));
-                    tab(last, btn || null);
-                    if (last === 'notes') loadNotes();
+                    openNamedTab(last);
                 }
             } catch (e) {}
         });
@@ -1026,20 +2141,37 @@
             }
         }
 
+        function escapeHTML(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[ch]));
+        }
+
+        function formatSeconds(total) {
+            const seconds = Math.max(0, Math.floor(total || 0));
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
         // --- NOTES LOGIC ---
         async function loadNotes() {
             const notes = await apiFetch(`/api/v1/notes/${VIDEO_ID}`, `/get_notes/${VIDEO_ID}`, { method: 'GET' });
             const list = document.getElementById('notes-list');
             list.innerHTML = notes.map(n => {
-                let m = Math.floor(n.timestamp / 60);
-                let s = Math.floor(n.timestamp % 60);
-                let ts = `${m}:${s.toString().padStart(2, '0')}`;
+                const ts = formatSeconds(n.timestamp);
+                const safeText = escapeHTML(n.text);
+                const safeArg = String(n.text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 return `
             <div class="note-item">
                 <span style="color:var(--accent); font-weight:bold; cursor:pointer;" onclick="jump(${n.timestamp})">[${ts}]</span>
-                <span id="txt-${n.id}">${n.text}</span>
+                <span id="txt-${n.id}">${safeText}</span>
                 <div style="text-align:right;">
-                    <button class="magic-btn" onclick="magicFix(${n.id}, '${n.text.replace(/'/g, "\\'")}')">✨ Polish</button>
+                    <button class="magic-btn" onclick="magicFix(${n.id}, '${safeArg}')">✨ Polish</button>
                 </div>
             </div>`;
             }).join('');
@@ -1065,13 +2197,13 @@
 
         async function magicFix(id, text) {
             const el = document.getElementById(`txt-${id}`);
-            el.innerHTML = "✨ Optimizing...";
+            el.textContent = "Optimizing...";
             const r = await fetch('/magic_fix', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text })
             });
             const d = await r.json();
-            el.innerHTML = d.response;
+            el.textContent = d.response || text;
         }
 
         // --- STANDARD LOGIC ---
@@ -1093,12 +2225,645 @@
             try { localStorage.setItem('cogniview.lastTab', id); } catch (e) {}
         }
         function jump(s) { const v = document.getElementById('vid'); v.currentTime = s; v.play(); }
+        function getTabButton(id) {
+            return document.querySelector(`.nav-pill[data-tab="${id}"]`);
+        }
+        function openNamedTab(id) {
+            const btn = getTabButton(id);
+            if (!btn) return;
+            if (id === 'pulse') {
+                return pulseTab(btn);
+            }
+            if (id === 'quest') {
+                return gameModeTab(btn);
+            }
+            if (id === 'notes') {
+                tab('notes', btn);
+                loadNotes();
+                return;
+            }
+            if (id === 'quiz') {
+                return quiz(btn);
+            }
+            if (id === 'chapters') {
+                return chapters(btn);
+            }
+            if (id === 'summary') {
+                return summaryTab(btn);
+            }
+            if (id === 'flashcards') {
+                return flashcardsTab(btn);
+            }
+            if (id === 'podcast') {
+                return podcast(btn);
+            }
+            if (id === 'mindmap') {
+                return mindmap(btn);
+            }
+            tab(id, btn);
+        }
+        function openPulseTab() { return openNamedTab('pulse'); }
+        function openQuizTab() { return openNamedTab('quiz'); }
+        function openSlidesTab() { return openNamedTab('slides'); }
+        function openNotesTab() { return openNamedTab('notes'); }
+        function openQuestTab() { return openNamedTab('quest'); }
+        function focusQueryInput() {
+            const inp = document.getElementById('inp');
+            if (!inp) return;
+            inp.focus();
+            inp.select();
+        }
+        const MODULE_SIZE_ORDER = ['sm', 'md', 'lg'];
+        const MODULE_SIZE_TEXT = { sm: 'S', md: 'M', lg: 'L' };
+        const moduleSizing = { dashboard: 'md', stage: 'md', tutor: 'md' };
+        function updateModuleSizingUI() {
+            const targets = ['dashboard', 'stage', 'tutor'];
+            targets.forEach((target) => {
+                const label = document.getElementById(`size-${target}-label`);
+                if (label) label.textContent = MODULE_SIZE_TEXT[moduleSizing[target]] || 'M';
+            });
+            const summary = document.getElementById('size-summary-chip');
+            if (summary) {
+                summary.textContent = `Sizes D:${MODULE_SIZE_TEXT[moduleSizing.dashboard]} S:${MODULE_SIZE_TEXT[moduleSizing.stage]} T:${MODULE_SIZE_TEXT[moduleSizing.tutor]}`;
+            }
+        }
+        function applyModuleSizing(persist = true) {
+            document.body.dataset.dashboardSize = moduleSizing.dashboard;
+            document.body.dataset.stageSize = moduleSizing.stage;
+            document.body.dataset.tutorSize = moduleSizing.tutor;
+            updateModuleSizingUI();
+            if (persist) {
+                try { localStorage.setItem('cogniview.moduleSizing', JSON.stringify(moduleSizing)); } catch (e) {}
+            }
+        }
+        function loadModuleSizing() {
+            try {
+                const raw = localStorage.getItem('cogniview.moduleSizing');
+                if (raw) {
+                    const saved = JSON.parse(raw);
+                    ['dashboard', 'stage', 'tutor'].forEach((target) => {
+                        if (saved && MODULE_SIZE_ORDER.includes(saved[target])) {
+                            moduleSizing[target] = saved[target];
+                        }
+                    });
+                }
+            } catch (e) {}
+            applyModuleSizing(false);
+        }
+        function adjustModuleSize(target, delta) {
+            if (!MODULE_SIZE_ORDER.length || !moduleSizing[target]) return;
+            const currentIndex = MODULE_SIZE_ORDER.indexOf(moduleSizing[target]);
+            const nextIndex = Math.max(0, Math.min(MODULE_SIZE_ORDER.length - 1, currentIndex + delta));
+            if (nextIndex === currentIndex) return;
+            moduleSizing[target] = MODULE_SIZE_ORDER[nextIndex];
+            applyModuleSizing(true);
+            showToast(`${target.charAt(0).toUpperCase() + target.slice(1)} size ${MODULE_SIZE_TEXT[moduleSizing[target]]}`);
+        }
+        function resetModuleSizing() {
+            moduleSizing.dashboard = 'md';
+            moduleSizing.stage = 'md';
+            moduleSizing.tutor = 'md';
+            applyModuleSizing(true);
+            resetDraggableLayout(true);
+        }
+        const draggableLayout = {
+            leftWidth: null,
+            stageHeight: null
+        };
+        function saveDraggableLayout() {
+            try { localStorage.setItem('cogniview.draggableLayout', JSON.stringify(draggableLayout)); } catch (e) {}
+        }
+        function loadDraggableLayout() {
+            try {
+                const raw = localStorage.getItem('cogniview.draggableLayout');
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved && Number.isFinite(saved.leftWidth)) draggableLayout.leftWidth = saved.leftWidth;
+                if (saved && Number.isFinite(saved.stageHeight)) draggableLayout.stageHeight = saved.stageHeight;
+            } catch (e) {}
+        }
+        function applyDraggableLayout() {
+            const container = document.querySelector('.container');
+            const splitter = document.getElementById('panel-splitter');
+            if (!container || !splitter) return;
+            const desktop = window.innerWidth > 1180;
+            splitter.style.display = desktop ? 'block' : 'none';
+            if (desktop) {
+                const minRight = Math.max(360, Math.round(window.innerWidth * 0.24));
+                const total = container.clientWidth || 1400;
+                const maxLeft = total - minRight - 16;
+                const left = Math.max(520, Math.min(draggableLayout.leftWidth || Math.round(total * 0.64), maxLeft));
+                draggableLayout.leftWidth = left;
+                container.style.gridTemplateColumns = `${left}px 16px minmax(${minRight}px, 1fr)`;
+                container.style.gap = '0px';
+            } else {
+                container.style.gridTemplateColumns = '';
+                container.style.gap = '';
+            }
+            if (Number.isFinite(draggableLayout.stageHeight)) {
+                document.body.style.setProperty('--stage-video-max', `${draggableLayout.stageHeight}px`);
+            }
+        }
+        function initDraggableLayout() {
+            loadDraggableLayout();
+            applyDraggableLayout();
+            const splitter = document.getElementById('panel-splitter');
+            if (splitter) {
+                splitter.addEventListener('mousedown', (event) => {
+                    if (window.innerWidth <= 1180) return;
+                    event.preventDefault();
+                    const container = document.querySelector('.container');
+                    const rect = container.getBoundingClientRect();
+                    const minRight = Math.max(360, Math.round(window.innerWidth * 0.24));
+                    const onMove = (moveEvent) => {
+                        const next = Math.max(520, Math.min(moveEvent.clientX - rect.left, rect.width - minRight - 16));
+                        draggableLayout.leftWidth = Math.round(next);
+                        applyDraggableLayout();
+                    };
+                    const onUp = () => {
+                        document.body.classList.remove('dragging');
+                        saveDraggableLayout();
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                        showToast('Dashboard panels resized');
+                    };
+                    document.body.classList.add('dragging');
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                });
+            }
+            const stageResizer = document.getElementById('stage-resizer');
+            if (stageResizer) {
+                stageResizer.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    const video = document.getElementById('vid');
+                    const startHeight = Math.round(video?.getBoundingClientRect().height || draggableLayout.stageHeight || 450);
+                    const startY = event.clientY;
+                    const onMove = (moveEvent) => {
+                        const delta = moveEvent.clientY - startY;
+                        const next = Math.max(300, Math.min(680, startHeight + delta));
+                        draggableLayout.stageHeight = Math.round(next);
+                        document.body.style.setProperty('--stage-video-max', `${next}px`);
+                    };
+                    const onUp = () => {
+                        document.body.classList.remove('dragging');
+                        saveDraggableLayout();
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                        showToast('Lecture stage resized');
+                    };
+                    document.body.classList.add('dragging');
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                });
+            }
+            window.addEventListener('resize', applyDraggableLayout);
+        }
+        function resetDraggableLayout(showFeedback = false) {
+            draggableLayout.leftWidth = null;
+            draggableLayout.stageHeight = null;
+            document.body.style.removeProperty('--stage-video-max');
+            try { localStorage.removeItem('cogniview.draggableLayout'); } catch (e) {}
+            applyDraggableLayout();
+            if (showFeedback) showToast('Layout reset');
+        }
+        function seedTimestampNote() {
+            const inp = document.getElementById('noteInput');
+            const vid = document.getElementById('vid');
+            if (!inp || !vid) return;
+            const stamp = `[${formatSeconds(Math.floor(vid.currentTime || 0))}] `;
+            openNotesTab();
+            if (!inp.value.trim()) {
+                inp.value = `${stamp}Key point: `;
+            } else if (!inp.value.startsWith(stamp)) {
+                inp.value = `${stamp}${inp.value}`;
+            }
+            inp.focus();
+            inp.setSelectionRange(inp.value.length, inp.value.length);
+            showToast('Note seeded with current timestamp');
+        }
+        let quizDataPromise = null;
+        async function ensureQuizData(force = false) {
+            if (!force && Array.isArray(window._quizData) && window._quizData.length) return window._quizData;
+            if (!force && quizDataPromise) return quizDataPromise;
+            quizDataPromise = (async () => {
+                const data = await apiFetch('/api/v1/quiz', '/quiz', { method: 'POST' });
+                const raw = data && typeof data === 'object' && 'quiz_data' in data ? data.quiz_data : data;
+                const parsed = Array.isArray(raw) ? raw : JSON.parse(raw);
+                window._quizData = parsed;
+                return parsed;
+            })();
+            try {
+                return await quizDataPromise;
+            } finally {
+                quizDataPromise = null;
+            }
+        }
+        const questState = {
+            started: false,
+            index: 0,
+            score: 0,
+            streak: 0,
+            hearts: 3,
+            correct: 0,
+            answered: false,
+            selected: null,
+            lastCorrect: false
+        };
+        function resetQuestState() {
+            questState.started = true;
+            questState.index = 0;
+            questState.score = 0;
+            questState.streak = 0;
+            questState.hearts = 3;
+            questState.correct = 0;
+            questState.answered = false;
+            questState.selected = null;
+            questState.lastCorrect = false;
+        }
+        function getQuestHearts(count) {
+            return '❤'.repeat(Math.max(0, count)) + '·'.repeat(Math.max(0, 3 - count));
+        }
+        function getQuestEncouragement() {
+            if (questState.correct >= 4) return 'Amazing work. The learner is building real confidence here.';
+            if (questState.streak >= 2) return 'Nice streak. Keep the momentum going with the next challenge.';
+            if (questState.hearts === 1) return 'One heart left. Slow down and use the explanation before the next answer.';
+            return 'Each challenge turns the lecture into a small win with instant coaching.';
+        }
+        function renderQuestMode() {
+            const shell = document.getElementById('quest-shell');
+            if (!shell) return;
+            const qs = Array.isArray(window._quizData) ? window._quizData : [];
+            const total = qs.length || 0;
+            if (!total) {
+                shell.innerHTML = '<div class="quest-empty"><div style="font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:8px;">Quest data unavailable</div><div>Try again in a moment. CogniView could not build the game questions yet.</div></div>';
+                return;
+            }
+            const progress = Math.min(100, Math.round((questState.index / total) * 100));
+            const finished = questState.index >= total || questState.hearts <= 0;
+            const current = !finished ? qs[questState.index] : null;
+            const feedback = questState.answered && current
+                ? `<div class="quest-feedback"><strong>${questState.lastCorrect ? 'Great job.' : 'Good try.'}</strong> ${escapeHTML(current.explanation || 'Use the tutor explanation to reinforce the idea before the next challenge.')}</div>`
+                : '';
+            const controls = finished
+                ? `<div class="quest-controls"><button class="quest-btn primary" onclick="restartQuestMode()">Play Again</button><button class="quest-btn" onclick="openQuizTab()">Open Full Quiz</button></div>`
+                : questState.answered
+                    ? `<div class="quest-controls"><button class="quest-btn primary" onclick="advanceQuestMode()">Next Challenge</button><button class="quest-btn" onclick="focusQueryInput()">Ask Tutor</button></div>`
+                    : '';
+            shell.innerHTML = `
+                <div class="quest-hero">
+                    <div class="quest-panel">
+                        <div class="quest-kicker">Quest Mode</div>
+                        <div class="quest-title">Teach the topic like a mini game</div>
+                        <div class="quest-copy">This mode turns the lecture into a child-friendly mission: short questions, bright feedback, lives, streaks, and explanations that reward curiosity instead of punishing mistakes.</div>
+                        <div class="quest-badges">
+                            <span class="quest-badge">Hearts ${getQuestHearts(questState.hearts)}</span>
+                            <span class="quest-badge">Score ${questState.score}</span>
+                            <span class="quest-badge">Streak ${questState.streak}</span>
+                        </div>
+                    </div>
+                    <div class="quest-scoreboard">
+                        <div class="quest-stat"><span>Progress</span><strong>${finished ? total : questState.index + 1}/${total}</strong></div>
+                        <div class="quest-stat"><span>Correct</span><strong>${questState.correct}</strong></div>
+                        <div class="quest-stat"><span>Coach Hint</span><strong style="font-size:0.88rem;line-height:1.4;">${escapeHTML(getQuestEncouragement())}</strong></div>
+                    </div>
+                </div>
+                <div class="quest-progress"><div class="quest-progress-fill" style="width:${finished ? 100 : progress}%"></div></div>
+                <div class="quest-card">
+                    ${
+                        finished
+                        ? `<div class="quest-card-top"><div><div class="quest-level">Quest Complete</div><div class="quest-prompt">${questState.hearts > 0 ? 'The learner made it through the mission.' : 'Mission paused. Time to regroup and try again.'}</div></div></div>
+                           <div class="quest-feedback"><strong>Final score:</strong> ${questState.score} points. <strong>Correct answers:</strong> ${questState.correct}/${total}. ${escapeHTML(getQuestEncouragement())}</div>
+                           ${controls}`
+                        : `<div class="quest-card-top">
+                               <div>
+                                   <div class="quest-level">Mission ${questState.index + 1}</div>
+                                   <div class="quest-prompt">${escapeHTML(current.q || 'What did we learn here?')}</div>
+                               </div>
+                               <span class="quest-badge">${escapeHTML(current.difficulty || 'Focus')}</span>
+                           </div>
+                           <div class="quest-option-list">
+                               ${(current.options || []).map((option, idx) => `<button class="quest-option" ${questState.answered ? 'disabled' : ''} onclick="answerQuestMode(${idx})">${escapeHTML(option)}</button>`).join('')}
+                           </div>
+                           ${feedback}
+                           ${controls || '<div class="quest-copy">Pick the best answer. Correct answers build streak and stars. Wrong answers still teach with a hint.</div>'}`
+                    }
+                </div>
+            `;
+        }
+        async function gameModeTab(btn) {
+            tab('quest', btn);
+            const shell = document.getElementById('quest-shell');
+            shell.innerHTML = '<div class="summary-loading"><div class="spinner-ring"></div><div style="color:var(--accent);font-family:monospace;letter-spacing:2px;">BUILDING QUEST MODE...</div></div>';
+            try {
+                await ensureQuizData();
+                if (!questState.started) resetQuestState();
+                renderQuestMode();
+            } catch (e) {
+                shell.innerHTML = `<div class="quest-empty"><div style="font-size:1.1rem;font-weight:800;color:var(--red);margin-bottom:8px;">Quest failed to load</div><div>${escapeHTML(String(e))}</div></div>`;
+            }
+        }
+        function restartQuestMode() {
+            resetQuestState();
+            renderQuestMode();
+            showToast('Quest restarted');
+        }
+        async function answerQuestMode(selected) {
+            const qs = Array.isArray(window._quizData) ? window._quizData : [];
+            const q = qs[questState.index];
+            if (!q || questState.answered) return;
+            const correctHit = selected === q.correct;
+            const concept = (q.q || 'General').split(/\s+/).slice(0, 5).join(' ');
+            questState.answered = true;
+            questState.selected = selected;
+            questState.lastCorrect = correctHit;
+            if (correctHit) {
+                questState.correct += 1;
+                questState.streak += 1;
+                questState.score += 15 + (questState.streak * 2);
+            } else {
+                questState.hearts = Math.max(0, questState.hearts - 1);
+                questState.streak = 0;
+                questState.score = Math.max(0, questState.score - 4);
+            }
+            await CogniTelemetry.recordMastery(concept, correctHit ? 10 : -4, correctHit ? 'quest_correct' : 'quest_wrong', 0.72);
+            await CogniTelemetry.recordEvent('quest_answer', { signal: correctHit ? 'correct' : 'wrong', value: correctHit ? 1 : 0, concept, mode: 'quest' });
+            renderQuestMode();
+        }
+        function advanceQuestMode() {
+            const qs = Array.isArray(window._quizData) ? window._quizData : [];
+            if (!qs.length) return;
+            questState.index += 1;
+            questState.answered = false;
+            questState.selected = null;
+            renderQuestMode();
+        }
+
+        let pulseLoaded = false;
+        async function pulseTab(btn) {
+            tab('pulse', btn);
+            if (!pulseLoaded) await loadPulse();
+            renderLivePulse();
+        }
+
+        async function loadPulse() {
+            const inner = document.getElementById('pulse-inner');
+            inner.innerHTML = '<div class="summary-loading"><div class="spinner-ring"></div><div style="color:var(--accent);font-family:monospace;letter-spacing:2px;">BUILDING COGNITIVE PROFILE...</div></div>';
+            try {
+                const profile = await apiFetch(
+                    `/api/v1/cognitive-profile/${VIDEO_ID}`,
+                    `/api/v1/cognitive-profile/${VIDEO_ID}`,
+                    { method: 'GET' }
+                );
+                window._cogniProfile = profile;
+                CogniTelemetry.masteryAverage = profile.mastery?.average ?? CogniTelemetry.masteryAverage;
+                pulseLoaded = true;
+                renderPulse(profile);
+                renderLivePulse();
+            } catch (e) {
+                inner.innerHTML = `<div class="summary-loading" style="color:var(--red)">Profile failed: ${escapeHTML(e.message || e)}</div>`;
+            }
+        }
+
+        function renderPulse(profile) {
+            const stats = profile.stats || {};
+            const maxDist = Math.max(...(profile.distribution || []).map(x => x.value || 0), 1);
+            const distHtml = (profile.distribution || []).map(item => {
+                const pct = Math.max(4, Math.round(((item.value || 0) / maxDist) * 100));
+                return `<div class="pulse-bar-row"><span>${escapeHTML(item.label)}</span><div class="pulse-track"><div class="pulse-fill" style="width:${pct}%"></div></div><span>${escapeHTML(item.value)}</span></div>`;
+            }).join('');
+            const recHtml = (profile.recommendations || []).map(r => `<div>${escapeHTML(r)}</div>`).join('');
+            const conceptsHtml = (profile.concepts || []).map(c => `<span class="pulse-chip">${escapeHTML(c)}</span>`).join('') || '<span class="pulse-chip">No concepts yet</span>';
+            const masteryItems = profile.mastery?.items || [];
+            const masteryHtml = masteryItems.slice(0, 8).map(item => `
+                <div class="mastery-row">
+                    <div>
+                        <div>${escapeHTML(item.concept)} <span style="color:var(--text-secondary);font-size:0.72rem;">${escapeHTML(item.state)}</span></div>
+                        <div class="mastery-track"><div class="mastery-fill" style="width:${Math.max(4, item.score || 0)}%"></div></div>
+                    </div>
+                    <strong style="color:var(--accent);">${item.score || 0}%</strong>
+                </div>
+            `).join('') || '<div style="color:var(--text-secondary)">Mastery model will fill in as you quiz, answer, and receive interventions.</div>';
+            const eventHtml = (profile.cognitive?.events || []).slice().reverse().map(e => `
+                <div class="event-row">
+                    <strong>${escapeHTML(formatSeconds(e.timestamp || 0))}</strong>
+                    <span>${escapeHTML(e.event_type)} ${e.signal ? `- ${escapeHTML(e.signal)}` : ''}</span>
+                </div>
+            `).join('') || '<div style="color:var(--text-secondary)">No cognitive events recorded yet.</div>';
+            const timelineHtml = (profile.timeline || []).map(t => `
+                <div class="pulse-time">
+                    <button onclick="jump(${Number(t.start) || 0})">${escapeHTML(t.label)}</button>
+                    <div>${escapeHTML(t.sample || 'Transcript segment')}</div>
+                </div>
+            `).join('') || '<div style="color:var(--text-secondary)">No timestamped transcript available.</div>';
+
+            document.getElementById('pulse-inner').innerHTML = `
+                <div class="pulse-hero">
+                    <div class="pulse-meter">
+                        <div class="pulse-label">Learning Readiness</div>
+                        <div class="pulse-score">${Math.round(profile.readiness || 0)}%</div>
+                        <div style="color:var(--text-secondary);line-height:1.5;margin-top:8px;">A quick estimate from notes, concepts, slides, transcript depth, and visual coverage.</div>
+                    </div>
+                    <div class="pulse-panel">
+                        <div class="pulse-label">Lecture Intelligence</div>
+                        <div class="pulse-grid">
+                            <div class="pulse-stat"><strong>${stats.duration_minutes || 0}</strong><span>Minutes</span></div>
+                            <div class="pulse-stat"><strong>${stats.transcript_words || 0}</strong><span>Words</span></div>
+                            <div class="pulse-stat"><strong>${stats.slides || 0}</strong><span>Slides</span></div>
+                            <div class="pulse-stat"><strong>${stats.notes || 0}</strong><span>Notes</span></div>
+                            <div class="pulse-stat"><strong>${stats.concepts || 0}</strong><span>Concepts</span></div>
+                            <div class="pulse-stat"><strong>${stats.notes_per_10_min || 0}</strong><span>Notes / 10m</span></div>
+                            <div class="pulse-stat"><strong>${profile.mastery?.average || 0}%</strong><span>Mastery</span></div>
+                            <div class="pulse-stat"><strong>${profile.cognitive?.average_focus ?? '--'}</strong><span>Avg Focus</span></div>
+                            <div class="pulse-stat"><strong>${profile.cognitive?.interventions || 0}</strong><span>Interventions</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Knowledge Distribution</div>
+                    <div class="pulse-bars">${distHtml}</div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Core Concepts</div>
+                    <div class="pulse-chip-row">${conceptsHtml}</div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Recommended Next Moves</div>
+                    <div class="pulse-list">${recHtml}</div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Mastery Model</div>
+                    <div>${masteryHtml}</div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Cognitive Event Stream</div>
+                    <div class="event-feed">${eventHtml}</div>
+                </div>
+                <div class="pulse-panel">
+                    <div class="pulse-label">Timeline Scan</div>
+                    <div class="pulse-timeline">${timelineHtml}</div>
+                </div>
+            `;
+        }
+
+        const CogniTelemetry = {
+            focusSamples: [],
+            emotion: 'OFFLINE',
+            autopilot: false,
+            intervention: null,
+            masteryAverage: null,
+            lastEventAt: 0,
+            activeMode: 'Manual',
+            pushFocus(score) {
+                this.focusSamples.push({ score: Number(score) || 0, ts: Date.now() });
+                if (this.focusSamples.length > 80) this.focusSamples.shift();
+            },
+            averageFocus() {
+                if (!this.focusSamples.length) return null;
+                return Math.round(this.focusSamples.reduce((sum, x) => sum + x.score, 0) / this.focusSamples.length);
+            },
+            async recordEvent(eventType, payload = {}) {
+                const now = Date.now();
+                if (eventType === 'focus_sample' && now - this.lastEventAt < 4500) return;
+                if (eventType === 'focus_sample') this.lastEventAt = now;
+                const vid = document.getElementById('vid');
+                try {
+                    await apiFetch('/api/v1/cognitive-event', '/api/v1/cognitive-event', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            video_id: VIDEO_ID,
+                            timestamp: vid ? vid.currentTime : 0,
+                            event_type: eventType,
+                            signal: payload.signal || payload.state || '',
+                            value: payload.value ?? null,
+                            payload
+                        })
+                    });
+                    pulseLoaded = false;
+                } catch (e) {}
+            },
+            async recordMastery(concept, delta, eventType = 'study', confidence = 0.55) {
+                const vid = document.getElementById('vid');
+                try {
+                    const d = await apiFetch('/api/v1/mastery-event', '/api/v1/mastery-event', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            video_id: VIDEO_ID,
+                            timestamp: vid ? vid.currentTime : 0,
+                            concept: concept || 'General',
+                            event_type: eventType,
+                            score_delta: delta,
+                            confidence
+                        })
+                    });
+                    this.masteryAverage = d.mastery?.average ?? this.masteryAverage;
+                    pulseLoaded = false;
+                    renderLivePulse();
+                    return d;
+                } catch (e) {}
+            }
+        };
+        window.CogniViewTelemetry = CogniTelemetry;
+
+        function renderLivePulse() {
+            const avg = CogniTelemetry.averageFocus();
+            const focusEl = document.getElementById('live-focus');
+            const emotionEl = document.getElementById('live-emotion');
+            const autoEl = document.getElementById('live-autopilot');
+            const mastery = CogniTelemetry.masteryAverage;
+            const overviewMode = document.getElementById('overview-mode');
+            const overviewEmotion = document.getElementById('overview-emotion');
+            if (focusEl) focusEl.textContent = avg === null ? 'OFF' : `${avg}% AVG`;
+            if (emotionEl) emotionEl.textContent = CogniTelemetry.emotion || 'OFFLINE';
+            if (autoEl) autoEl.textContent = CogniTelemetry.autopilot ? `ACTIVE${mastery !== null ? ' / ' + mastery + '%' : ''}` : `MANUAL${mastery !== null ? ' / ' + mastery + '%' : ''}`;
+            if (overviewMode) overviewMode.textContent = CogniTelemetry.autopilot ? `Autopilot / ${CogniTelemetry.activeMode}` : CogniTelemetry.activeMode;
+            if (overviewEmotion) overviewEmotion.textContent = CogniTelemetry.emotion || 'Focused';
+        }
+        setInterval(renderLivePulse, 1500);
+        window.addEventListener('cogniview:modechange', (event) => {
+            const mode = event?.detail?.activeMode;
+            CogniTelemetry.activeMode = mode ? String(mode).replace(/^./, ch => ch.toUpperCase()) : 'Manual';
+            renderLivePulse();
+        });
+
+        function renderTutor(intervention) {
+            const body = document.getElementById('tutor-body');
+            const state = document.getElementById('tutor-state');
+            if (!body || !state) return;
+            if (!intervention) {
+                state.textContent = CogniTelemetry.autopilot ? 'WATCHING' : 'STANDBY';
+                return;
+            }
+            state.textContent = (intervention.action || 'COACH').toUpperCase();
+            body.innerHTML = `
+                <div style="color:var(--text-primary);font-weight:800;margin-bottom:6px;">${escapeHTML(intervention.headline || 'Autopilot Tutor')}</div>
+                <div>${escapeHTML(intervention.explanation || '')}</div>
+                <div style="margin-top:8px;color:var(--accent);font-weight:700;">${escapeHTML(intervention.micro_question || '')}</div>
+            `;
+        }
+
+        async function runAutopilotIntervention(trigger = 'manual_check') {
+            const vid = document.getElementById('vid');
+            const body = document.getElementById('tutor-body');
+            const state = document.getElementById('tutor-state');
+            if (state) state.textContent = 'THINKING';
+            if (body) body.textContent = 'Autopilot is reading the local transcript window and choosing the next teaching move...';
+            try {
+                if (vid && !vid.paused) vid.pause();
+                const intervention = await apiFetch('/api/v1/autopilot-intervention', '/api/v1/autopilot-intervention', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ video_id: VIDEO_ID, timestamp: vid ? vid.currentTime : 0, trigger })
+                });
+                CogniTelemetry.intervention = intervention;
+                CogniTelemetry.masteryAverage = intervention.mastery?.average ?? CogniTelemetry.masteryAverage;
+                renderTutor(intervention);
+                renderLivePulse();
+                pulseLoaded = false;
+            } catch (e) {
+                if (state) state.textContent = 'ERROR';
+                if (body) body.textContent = 'Autopilot intervention failed. Try again after the AI service is reachable.';
+            }
+        }
+
+        async function markTutorAnswer(understood) {
+            const intervention = CogniTelemetry.intervention || {};
+            const concept = intervention.concept || 'General';
+            await CogniTelemetry.recordMastery(concept, understood ? 9 : -6, understood ? 'confirmed_understanding' : 'still_confused', understood ? 0.75 : 0.7);
+            await CogniTelemetry.recordEvent(understood ? 'understanding_confirmed' : 'understanding_gap', {
+                signal: concept,
+                value: understood ? 1 : 0,
+                intervention
+            });
+            const body = document.getElementById('tutor-body');
+            const state = document.getElementById('tutor-state');
+            if (state) state.textContent = understood ? 'MASTERED' : 'REVIEW';
+            if (body) body.textContent = understood ? 'Nice. Mastery updated, and the video is ready to continue.' : 'Got it. CogniView marked this concept for review and will keep the pace gentler.';
+            if (understood) document.getElementById('vid')?.play();
+        }
+
+        async function quickCaptureNote(label = 'Gesture checkpoint') {
+            const vid = document.getElementById('vid');
+            const timestamp = vid ? vid.currentTime : 0;
+            await apiFetch('/api/v1/notes', '/save_note', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ video_id: VIDEO_ID, timestamp, text: label })
+            });
+            await CogniTelemetry.recordEvent('gesture_note', { signal: 'pinch', value: 1, label });
+            pulseLoaded = false;
+            if (!document.getElementById('notes').classList.contains('hidden')) loadNotes();
+        }
+        window.quickCaptureNote = quickCaptureNote;
 
         async function send() {
             const i = document.getElementById('inp'); const txt = i.value.trim(); if (!txt) return;
             i.value = '';
             const c = document.getElementById('chat');
-            c.innerHTML += `<div class="bubble user">${txt}</div>`; c.scrollTop = c.scrollHeight;
+            c.innerHTML += `<div class="bubble user">${escapeHTML(txt)}</div>`; c.scrollTop = c.scrollHeight;
+            showTyping();
             const vid = document.getElementById('vid');
             const currentTime = vid ? vid.currentTime : 0;
             const lang = document.getElementById('lang').value;
@@ -1112,21 +2877,106 @@
                         body: JSON.stringify({ message: txt, timestamp: currentTime, lang: lang })
                     }
                 );
-                if (d.response.includes('mermaid')) {
-                    if (window.renderMap) { window.renderMap(d.response); tab('transcript', document.querySelector('.nav-pill')); c.innerHTML += `<div class="bubble ai">🧠 Mind Map generated!</div>`; }
-                } else {
-                    let fmt = d.response
+                
+                removeTyping();
+
+                if (d.debate) {
+                    d.debate.forEach(ex => {
+                        let fmt = escapeHTML(ex.text)
+                            .replace(/\[(\d+):(\d+)\]/g, (m, mn, sc) => `<a href="#" onclick="jump(${parseInt(mn) * 60 + parseInt(sc)});return false;" style="color:var(--accent);text-decoration:none;font-weight:bold">${m}</a>`)
+                            .replace(/\n/g, '<br>');
+                        
+                        let personaColor = 'var(--accent)';
+                        let personaIcon = '🤖';
+                        const personaName = String(ex.persona || 'AI');
+                        if(personaName.toLowerCase().includes('tutor') || personaName.toLowerCase().includes('socrates')) {
+                            personaColor = '#34D399';
+                            personaIcon = '👨‍🏫';
+                        } else if(personaName.toLowerCase().includes('eli5')) {
+                            personaColor = '#60A5FA';
+                            personaIcon = '🧸';
+                        } else if(personaName.toLowerCase().includes('critic')) {
+                            personaColor = '#F87171';
+                            personaIcon = '⚖️';
+                        }
+                        
+                        c.innerHTML += `
+                            <div class="bubble ai" style="border-left: 3px solid ${personaColor}; padding-left: 12px; margin-top: 8px;">
+                                <div style="font-size:0.75rem; font-weight:800; letter-spacing:1px; color:${personaColor}; margin-bottom:4px; text-transform:uppercase;">
+                                    ${personaIcon} ${escapeHTML(personaName)}
+                                </div>
+                                <div style="line-height:1.5;">${fmt}</div>
+                            </div>
+                        `;
+                    });
+                } else if (d.response) {
+                    let fmt = escapeHTML(d.response)
                         .replace(/\[(\d+):(\d+)\]/g, (m, mn, sc) => `<a href="#" onclick="jump(${parseInt(mn) * 60 + parseInt(sc)});return false;" style="color:var(--accent);text-decoration:none;font-weight:bold">${m}</a>`)
-                        .replace(/\n/g, '<br>')
-                        .replace(/ /g, '&nbsp;'); // preserve structural spacing
-                    c.innerHTML += `<div class="bubble ai" style="font-family: monospace;">${fmt}</div>`;
+                        .replace(/\n/g, '<br>');
+                    c.innerHTML += `<div class="bubble ai">${fmt}</div>`;
                 }
-            } catch (e) { c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`; }
+            } catch (e) { 
+                removeTyping();
+                c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`; 
+            }
             c.scrollTop = c.scrollHeight;
         }
 
         async function chapters(btn) { tab('chapters', btn); const l = document.getElementById('ch-list'); if (l.innerHTML) return; l.innerHTML = 'Scanning Neural data...'; try { const r = await fetch('/chapters', { method: 'POST' }); const d = await r.json(); l.innerHTML = JSON.parse(d.chapters).map(c => `<div class="list-row" onclick="jump(${c.seconds})"><b style="color:var(--accent)">${c.timestamp}</b>&nbsp; ${c.title}</div>`).join(''); } catch (e) { l.innerHTML = "Analysis Failed."; } }
-        async function quiz(btn) { tab('quiz', btn); const l = document.getElementById('q-list'); if (l.innerHTML) return; l.innerHTML = 'Generating Assessment...'; try { const r = await fetch('/quiz', { method: 'POST' }); const d = await r.json(); const qs = JSON.parse(d.quiz_data); l.innerHTML = qs.map((q, i) => `<div style="background:rgba(255,255,255,0.05);padding:15px;border-radius:12px;margin-bottom:10px;"><b>${i + 1}. ${q.q}</b><br>${q.options.map((o, oi) => `<button onclick="this.style.background='${oi === q.correct ? 'var(--green)' : 'var(--red)'}';this.style.color='black'" style="display:block;width:100%;margin:5px 0;padding:8px;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.3);color:white;text-align:left;cursor:pointer;">${o}</button>`).join('')}</div>`).join(''); } catch (e) { l.innerHTML = "Quiz Generation Failed."; } }
+        async function quiz(btn) {
+            tab('quiz', btn);
+            const l = document.getElementById('q-list');
+            if (l.innerHTML) return;
+            l.innerHTML = '<div style="color:var(--accent);font-family:monospace;padding:20px;">GENERATING ASSESSMENT...</div>';
+            try {
+                const qs = await ensureQuizData();
+                const diffColor = { Easy:'#34D399',Medium:'#F59E0B',Hard:'#FB7185',Unknown:'#94A3B8' };
+                l.innerHTML = qs.map((q, i) => `
+                    <div style="background:rgba(15,23,42,0.8);padding:18px 20px;border-radius:14px;margin-bottom:12px;border:1px solid rgba(148,163,184,0.12);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;">
+                            <b style="color:var(--text-primary);font-size:0.93rem;line-height:1.4;">${i+1}. ${q.q}</b>
+                            <span style="flex-shrink:0;font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:10px;
+                                background:${(diffColor[q.difficulty]||'#94A3B8')}22;
+                                color:${(diffColor[q.difficulty]||'#94A3B8')};
+                                border:1px solid ${(diffColor[q.difficulty]||'#94A3B8')}44;">${q.difficulty||'?'}</span>
+                        </div>
+                        ${(q.options||[]).map((o,oi) => `
+                            <button id="q${i}-opt${oi}"
+                                onclick="selectAnswer(${i},${oi},${q.correct})"
+                                data-expl="${(q.explanation||'').replace(/"/g,'&quot;')}"
+                                style="display:block;width:100%;margin:5px 0;padding:10px 14px;
+                                    border:1px solid rgba(148,163,184,0.15);border-radius:10px;
+                                    background:rgba(255,255,255,0.03);color:var(--text-secondary);
+                                    text-align:left;cursor:pointer;font-family:'Outfit',sans-serif;
+                                    font-size:0.87rem;transition:0.2s;letter-spacing:0.2px;"
+                                onmouseover="if(!this.disabled)this.style.background='rgba(255,255,255,0.07)'"
+                                onmouseout="if(!this.disabled)this.style.background='rgba(255,255,255,0.03)'">${o}</button>`).join('')}
+                        <div id="q${i}-exp" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;
+                            background:rgba(6,182,212,0.07);border-left:3px solid var(--accent);
+                            font-size:0.82rem;color:var(--text-secondary);line-height:1.5;"></div>
+                    </div>`).join('');
+            } catch (e) { l.innerHTML = `<div style="color:var(--red);padding:20px;">Quiz Failed: ${e}</div>`; }
+        }
+        function selectAnswer(qi, selected, correct) {
+            if (!window._quizData) return;
+            const q = window._quizData[qi];
+            const opts = q.options || [];
+            for (let i = 0; i < opts.length; i++) {
+                const b = document.getElementById(`q${qi}-opt${i}`);
+                if (!b) continue;
+                b.disabled = true;
+                if (i === correct) { b.style.background='rgba(52,211,153,0.2)'; b.style.borderColor='#34D399'; b.style.color='#34D399'; }
+                else if (i === selected) { b.style.background='rgba(251,113,133,0.2)'; b.style.borderColor='#FB7185'; b.style.color='#FB7185'; }
+                else { b.style.opacity='0.4'; }
+            }
+            const exp = document.getElementById(`q${qi}-exp`);
+            const expl = document.getElementById(`q${qi}-opt0`)?.dataset?.expl || '';
+            if (exp) { exp.style.display='block'; exp.innerHTML='&#128161; ' + escapeHTML(q.explanation || ''); }
+            const concept = (q.q || 'General').split(/\s+/).slice(0, 5).join(' ');
+            const correctHit = selected === correct;
+            CogniTelemetry.recordMastery(concept, correctHit ? 8 : -5, correctHit ? 'quiz_correct' : 'quiz_wrong', 0.7);
+            CogniTelemetry.recordEvent('quiz_answer', { signal: correctHit ? 'correct' : 'wrong', value: correctHit ? 1 : 0, concept });
+        }
 
         // --- PODCAST LOGIC ---
         let synth = window.speechSynthesis;
@@ -1421,13 +3271,24 @@
                 if (d.error) { inner.innerHTML = `<div class="summary-loading" style="color:var(--red)">⚠️ ${d.error}</div>`; return; }
 
                 const diffClass = `diff-${d.difficulty || 'Intermediate'}`;
-                const topicsHtml = (d.topics||[]).map(t => `<span class="topic-tag">${t}</span>`).join('');
                 const bulletsHtml = (d.bullets||[]).map(b => `<li>✦ ${b}</li>`).join('');
                 const termsHtml = (d.key_terms||[]).map(t => `
                     <div class="term-card">
                         <div class="term-name">${t.term}</div>
                         <div class="term-def">${t.definition}</div>
                     </div>`).join('');
+                
+                const sectionsHtml = (d.sections||[]).map((s, i) => `
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <span>${i+1}. ${s.header}</span>
+                            <span class="acc-icon">▼</span>
+                        </div>
+                        <div class="accordion-content">
+                            <div style="padding:16px 0;">${s.content}</div>
+                        </div>
+                    </div>
+                `).join('');
 
                 inner.innerHTML = `
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
@@ -1437,16 +3298,22 @@
                         </div>
                     </div>
                     <div class="tldr-card">
-                        <div class="tldr-label">TL;DR</div>
+                        <div class="tldr-label">EXECUTIVE SUMMARY</div>
                         <div class="tldr-text">${d.tldr||'Summary not available.'}</div>
                     </div>
-                    ${topicsHtml ? `<div style="margin-bottom:20px;">${topicsHtml}</div>` : ''}
-                    <div class="summary-section">
-                        <div class="summary-section-title">📌 Key Points</div>
+                    
+                    ${sectionsHtml ? `<div class="summary-section">
+                        <div class="summary-section-title">📑 Detailed Sections</div>
+                        ${sectionsHtml}
+                    </div>` : ''}
+
+                    ${bulletsHtml ? `<div class="summary-section">
+                        <div class="summary-section-title">📌 Key Takeaways</div>
                         <ul class="bullet-list">${bulletsHtml}</ul>
-                    </div>
+                    </div>` : ''}
+
                     ${termsHtml ? `<div class="summary-section">
-                        <div class="summary-section-title">📖 Key Terms</div>
+                        <div class="summary-section-title">📖 Core Concepts</div>
                         <div class="key-terms-grid">${termsHtml}</div>
                     </div>` : ''}
                 `;
@@ -1455,6 +3322,20 @@
                 inner.innerHTML = `<div class="summary-loading" style="color:var(--red)">⚠️ ${e}</div>`;
             }
         }
+
+        window.toggleAccordion = function(header) {
+            header.classList.toggle('active');
+            const content = header.nextElementSibling;
+            const icon = header.querySelector('.acc-icon');
+            if (content.style.maxHeight) {
+                content.style.maxHeight = null;
+                icon.style.transform = "rotate(0deg)";
+            } else {
+                content.style.maxHeight = content.scrollHeight + "px";
+                icon.style.transform = "rotate(180deg)";
+            }
+        };
+
 
         // ── FLASHCARDS ────────────────────────────────────────────────────────
         let fcCards = [], fcIndex = 0, fcLoaded = false;
@@ -1626,627 +3507,230 @@
             showToast(docked ? '📺 Video docked to corner' : '📺 Video returned to main stage');
         }
 
-        // ── FOCUS GUARD & HUD LOGIC ──────────────────────────────────────────
-        let focusActive = false;
-        let hudActive = false;
-        let calPoints = 0;
-        let focusScore = 100;
-        let gazeBuffer = [];          // smooth gaze coords
-        let lookAwayFrames = 0;       // consecutive off-screen frames before pausing
-        let focusPermissionStream = null;
 
-        function stopStream(stream) {
-            if (!stream) return;
-            try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
-        }
-
-        function formatCameraError(err) {
-            const name = err?.name || 'UnknownError';
-            if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-                return 'Camera access denied. Allow permission in browser settings.';
-            }
-            if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-                return 'No camera device found.';
-            }
-            if (name === 'NotReadableError' || name === 'TrackStartError') {
-                return 'Camera is busy. Close other apps using camera.';
-            }
-            if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
-                return 'Camera constraints unsupported on this device.';
-            }
-            if (name === 'SecurityError') {
-                return 'Blocked by browser security policy. Use localhost and allow camera.';
-            }
-            return err?.message || 'Unknown camera error.';
-        }
-
-        async function requestCameraStream() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera API unavailable in this browser/context.');
-            }
-
-            const constraintOptions = [
-                { video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } },
-                { video: { facingMode: 'user' } },
-                { video: true }
-            ];
-
-            let lastErr = null;
-            for (const constraints of constraintOptions) {
-                try {
-                    return await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (err) {
-                    lastErr = err;
-                }
-            }
-            throw lastErr || new Error('Could not access camera.');
-        }
-
-        function setDot(id, state) {
-            // state: '' | 'active' | 'warn'
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.className = 'feat-dot' + (state ? ' ' + state : '');
-        }
-
-        function toggleHUD() {
-            if (!focusActive) { showToast('👁️ Enable FOCUS GUARD first'); return; }
-            hudActive = !hudActive;
-            document.getElementById('hud-layer').style.display = hudActive ? 'block' : 'none';
-            setControlState('btn-hud', hudActive ? 'active' : '');
-        }
-
-        function stopFocusGuard(showMessage = true) {
-            try { webgazer.end(); } catch(e) {}
-            if (focusPermissionStream) {
-                stopStream(focusPermissionStream);
-                focusPermissionStream = null;
-            }
-            const vid = document.getElementById('vid');
-            if (vid && vid.paused) vid.play();
-            document.getElementById('focus-overlay').style.display = 'none';
-            document.querySelectorAll('.calibration-dot').forEach(e => e.style.display = 'none');
-            if (hudActive) {
-                hudActive = false;
-                document.getElementById('hud-layer').style.display = 'none';
-            }
-            focusActive = false;
-            setDot('dot-focus', '');
-            setControlState('btn-focus', '');
-            setControlState('btn-hud', '');
-            if (showMessage) showToast('👁️ Focus Guard Deactivated');
-        }
-
-        async function toggleFocusGuard() {
-            if (focusActive) {
-                stopFocusGuard(true);
-                return;
-            }
-
-            // Auto-handoff to reduce module conflicts on shared webcams.
-            if (gestureActive) { stopGestures(); setDot('dot-gesture', ''); }
-            if (emotionActive) { stopEmotion(); setDot('dot-emotion', ''); }
-
-            showToast('📷 Requesting camera access…');
-            setDot('dot-focus', 'warn');
-            setControlState('btn-focus', 'warn');
-
-            try {
-                // Step 1 — Verify camera permission first so we get a clean error
-                focusPermissionStream = await requestCameraStream();
-                // Release the temporary permission stream immediately so WebGazer
-                // can acquire the camera without "device busy" conflicts.
-                stopStream(focusPermissionStream);
-                focusPermissionStream = null;
-
-                // Step 2 — Configure & start WebGazer (suppress its default ugly UI)
-                if (!window.webgazer || typeof webgazer.begin !== 'function') {
-                    throw new Error('Focus engine failed to load. Refresh page and try again.');
-                }
-
-                await webgazer
-                    .setRegression('ridge')
-                    .showVideoPreview(false)
-                    .showPredictionPoints(false)
-                    .begin();
-
-                // Step 3 — Only AFTER begin() resolves are we truly active
-                focusActive = true;
-                calPoints = 0;
-                lookAwayFrames = 0;
-                gazeBuffer = [];
-                document.querySelectorAll('.calibration-dot').forEach(e => {
-                    delete e.dataset.calDone;
-                    e.style.backgroundColor = '';
-                    e.style.transform = '';
-                });
-                setDot('dot-focus', 'active');
-                setControlState('btn-focus', 'active');
-
-                // Step 4 — Register gaze listener
-                webgazer.setGazeListener(onGazeData);
-
-                // Step 5 — Show calibration dots
-                document.querySelectorAll('.calibration-dot').forEach(e => e.style.display = 'block');
-                showToast('✅ Camera Active! Click all 9 dots to calibrate.');
-
-            } catch(err) {
-                if (focusPermissionStream) {
-                    stopStream(focusPermissionStream);
-                    focusPermissionStream = null;
-                }
-                setDot('dot-focus', '');
-                setControlState('btn-focus', '');
-                showToast('⚠️ Focus camera error: ' + formatCameraError(err));
-                console.error('[FocusGuard]', err);
-            }
-        }
-
-        function onGazeData(data) {
-            if (!data || !focusActive) return;
-
-            // Smooth gaze with a small buffer
-            gazeBuffer.push({ x: data.x, y: data.y });
-            if (gazeBuffer.length > 5) gazeBuffer.shift();
-            const sx = gazeBuffer.reduce((a,b)=>a+b.x,0) / gazeBuffer.length;
-            const sy = gazeBuffer.reduce((a,b)=>a+b.y,0) / gazeBuffer.length;
-
-            const vid = document.getElementById('vid');
-            const overlay = document.getElementById('focus-overlay');
-            const rect = vid.getBoundingClientRect();
-
-            // Update HUD reticle position
-            if (hudActive) {
-                const reticle = document.getElementById('hud-reticle');
-                reticle.style.left = (sx - rect.left) + 'px';
-                reticle.style.top  = (sy - rect.top)  + 'px';
-            }
-
-            // Hit test with 120px tolerance buffer
-            const hit = (
-                sx > rect.left - 120 && sx < rect.right  + 120 &&
-                sy > rect.top  - 80  && sy < rect.bottom + 80
-            );
-
-            // Update focus score
-            focusScore = hit
-                ? Math.min(100, focusScore + 0.3)
-                : Math.max(0,   focusScore - 0.4);
-
-            if (hudActive) {
-                document.getElementById('hud-score').innerText = `FOCUS: ${Math.floor(focusScore)}%`;
-                document.getElementById('hud-reticle').style.borderColor = hit ? 'var(--accent)' : 'var(--red)';
-                document.getElementById('hud-msg').innerText    = hit ? 'LOCKED ON' : 'TARGET LOST';
-                document.getElementById('hud-msg').style.color  = hit ? 'var(--accent)' : 'var(--red)';
-            }
-
-            // Debounce pause: require 8 consecutive off frames (~0.5s) before pausing
-            if (hit) {
-                lookAwayFrames = 0;
-                overlay.style.display = 'none';
-                if (vid.paused && calPoints >= 9) vid.play();
-            } else {
-                lookAwayFrames++;
-                if (lookAwayFrames > 8) {
-                    overlay.style.display = 'flex';
-                    if (!vid.paused) vid.pause();
-                }
-            }
-        }
-
-        function cal(el) {
-            if (el.dataset.calDone === '1') return;
-            el.dataset.calDone = '1';
-            el.style.backgroundColor = '#34D399';
-            el.style.transform = 'scale(1.5)';
-            setTimeout(() => el.style.transform = 'scale(1)', 200);
-            calPoints++;
-            if (calPoints >= 9) {
-                document.querySelectorAll('.calibration-dot').forEach(e => e.style.display = 'none');
-                showToast('🎯 Calibration Complete! Focus Guard is ACTIVE.');
-            }
-        }
     </script>
 
-
     <script>
-        // ── TELEKINETIC GESTURE CONTROL (MEDIAPIPE HANDS) ────────────────────
-        let hands;
-        let gestureStream = null;
-        let gestureVideoEl = null;
-        let gestureRAF = null;
-        let gestureActive = false;
-        let lastGesture = '';
-        let gestureStableCount = 0;
-        let gestureCanvasElement;
-        let gestureCanvasCtx;
-
-        async function toggleGestures() {
-            if (gestureActive) {
-                stopGestures();
-                setDot('dot-gesture', '');
-                return;
-            }
-            if (focusActive) { stopFocusGuard(false); }
-            if (emotionActive) { stopEmotion(); setDot('dot-emotion', ''); }
-
-            showToast('✋ Starting Gesture Engine...');
-            setDot('dot-gesture', 'warn');
-            setControlState('btn-gesture', 'warn');
-            try {
-                gestureStream = await requestCameraStream();
-                gestureVideoEl = document.createElement('video');
-                gestureVideoEl.srcObject = gestureStream;
-                gestureVideoEl.style.display = 'none';
-                gestureVideoEl.playsInline = true;
-                document.body.appendChild(gestureVideoEl);
-                await gestureVideoEl.play();
-
-                if (!hands) {
-                    gestureCanvasElement = document.getElementById('gesture-canvas');
-                    gestureCanvasCtx = gestureCanvasElement.getContext('2d');
-                    hands = new Hands({
-                        locateFile: (f) => new URL(f, 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/').toString()
-                    });
-                    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
-                    hands.onResults(onGestureResults);
-                }
-
-                gestureActive = true;
-                lastGesture = '';
-                gestureStableCount = 0;
-                document.getElementById('gesture-canvas').style.display = 'block';
-                setDot('dot-gesture', 'active');
-                setControlState('btn-gesture', 'active');
-                showToast('✋ Gesture Control Active');
-
-                async function gestureLoop() {
-                    if (!gestureActive) return;
-                    if (gestureVideoEl && gestureVideoEl.readyState >= 2) {
-                        await hands.send({ image: gestureVideoEl });
-                    }
-                    gestureRAF = requestAnimationFrame(gestureLoop);
-                }
-                gestureLoop();
-
-            } catch(err) {
-                setDot('dot-gesture', '');
-                setControlState('btn-gesture', '');
-                gestureActive = false;
-                stopStream(gestureStream);
-                gestureStream = null;
-                showToast('⚠️ Gesture camera error: ' + formatCameraError(err));
-                console.error('[Gesture]', err);
-            }
+        // ── DRAWER ─────────────────────────────────────────────────────────
+        function openDrawer() {
+            document.getElementById('controls-drawer').classList.add('open');
+            document.getElementById('drawer-scrim').classList.add('show');
+        }
+        function closeDrawer() {
+            document.getElementById('controls-drawer').classList.remove('open');
+            document.getElementById('drawer-scrim').classList.remove('show');
         }
 
-        function stopGestures() {
-            gestureActive = false;
-            cancelAnimationFrame(gestureRAF);
-            if (gestureStream) { stopStream(gestureStream); gestureStream = null; }
-            if (gestureVideoEl) { gestureVideoEl.remove(); gestureVideoEl = null; }
-            document.getElementById('gesture-canvas').style.display = 'none';
-            setControlState('btn-gesture', '');
-        }
+        // ── COGNITIVE WIDGET ──────────────────────────────────────────────
+        let cogniWidgetVisible = false;
+        let sessionStart = Date.now();
+        let focusAlerts = 0;
+        let _liveFocusScore = null; // pushed by focus.js module via window.cwUpdateFocus
+        let _liveEmotion = null;    // pushed by emotion.js module via window.cwUpdateEmotion
+        
+        let autopilotEnabled = false;
+        let autopilotPopupTimeout = null;
+        let lastAutopilotInterventionAt = 0;
 
-        function onGestureResults(results) {
-            if (!gestureActive) return;
-
-            gestureCanvasCtx.save();
-            gestureCanvasCtx.clearRect(0, 0, gestureCanvasElement.width, gestureCanvasElement.height);
-            gestureCanvasCtx.drawImage(results.image, 0, 0, gestureCanvasElement.width, gestureCanvasElement.height);
-
-            const vid = document.getElementById('vid');
-
-            if (results.multiHandLandmarks) {
-                for (const landmarks of results.multiHandLandmarks) {
-                    drawConnectors(gestureCanvasCtx, landmarks, HAND_CONNECTIONS, { color: '#06B6D4', lineWidth: 5 });
-                    drawLandmarks(gestureCanvasCtx, landmarks, { color: '#F8FAFC', lineWidth: 2 });
-
-                    // GESTURE LOGIC
-                    // Simple Open vs Closed logic
-                    // Count extended fingers
-                    let fingers = 0;
-                    // Tips: 4 (Thumb), 8 (Index), 12 (Middle), 16 (Ring), 20 (Pinky)
-                    // Bases: 2, 5, 9, 13, 17
-
-                    // Thumb (check x dist mostly) - simplified to just 4 logic
-                    // Index
-                    if (landmarks[8].y < landmarks[5].y) fingers++;
-                    if (landmarks[12].y < landmarks[9].y) fingers++;
-                    if (landmarks[16].y < landmarks[13].y) fingers++;
-                    if (landmarks[20].y < landmarks[17].y) fingers++;
-
-                    let currentGesture = "";
-                    if (fingers >= 4) currentGesture = "OPEN"; // Pause
-                    else if (fingers == 0) currentGesture = "FIST"; // Play
-                    else if (fingers == 1 || fingers == 2) currentGesture = "POINT"; // Seek?
-
-                    // Draw Text
-                    gestureCanvasCtx.fillStyle = "white";
-                    gestureCanvasCtx.font = "30px Arial";
-                    gestureCanvasCtx.fillText(currentGesture, 10, 30);
-
-                    // Debounce / Trigger
-                    if (currentGesture === lastGesture) {
-                        gestureStableCount++;
-                    } else {
-                        gestureStableCount = 1;
-                    }
-                    lastGesture = currentGesture;
-
-                    // Require 3 stable frames before action to reduce jitter.
-                    if (gestureStableCount >= 3) {
-                        if (currentGesture === "OPEN" && !vid.paused) {
-                            vid.pause();
-                            showToast("✋ PAUSED");
-                        }
-                        if (currentGesture === "FIST" && vid.paused) {
-                            vid.play();
-                            showToast("✊ PLAYING");
-                        }
-                        gestureStableCount = 0;
-                    }
-                }
-            }
-            gestureCanvasCtx.restore();
-        }
-
-        function showToast(msg) {
-            // Remove any existing toast
-            document.querySelectorAll('.cogni-toast').forEach(t => t.remove());
-            const t = document.createElement('div');
-            t.className = 'cogni-toast';
-            t.style.cssText = [
-                'position:fixed', 'bottom:24px', 'right:24px', 'z-index:9999',
-                'background:linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.98))',
-                'border:1px solid rgba(6,182,212,0.4)',
-                'color:var(--text-primary)',
-                'padding:12px 20px',
-                'border-radius:12px',
-                'font-size:0.9rem', 'font-weight:600',
-                'box-shadow:0 8px 24px rgba(0,0,0,0.4),0 0 20px rgba(6,182,212,0.1)',
-                'opacity:0', 'transform:translateY(10px)',
-                'transition:opacity 0.25s,transform 0.25s',
-                'max-width:320px', 'pointer-events:none'
-            ].join(';');
-            t.textContent = msg;
-            document.body.appendChild(t);
-            requestAnimationFrame(() => {
-                t.style.opacity = '1';
-                t.style.transform = 'translateY(0)';
+        function toggleAutopilot() {
+            autopilotEnabled = !autopilotEnabled;
+            CogniTelemetry.autopilot = autopilotEnabled;
+            setControlState('btn-autopilot', autopilotEnabled ? 'active' : '');
+            renderLivePulse();
+            renderTutor(CogniTelemetry.intervention);
+            CogniTelemetry.recordEvent(autopilotEnabled ? 'autopilot_enabled' : 'autopilot_disabled', {
+                signal: 'manual_toggle',
+                value: autopilotEnabled ? 1 : 0
             });
-            setTimeout(() => {
-                t.style.opacity = '0';
-                t.style.transform = 'translateY(10px)';
-                setTimeout(() => t.remove(), 300);
-            }, 3000);
-        }
-    </script>
-    <script>
-        // ── AFFECTIVE EMOTION ENGINE ─────────────────────────────────────────
-        let faceMesh;
-        let emotionStream = null;      // raw MediaStream from getUserMedia
-        let emotionVideoEl = null;     // hidden video element
-        let emotionRAF = null;         // requestAnimationFrame handle
-        let emotionActive = false;
-        let emotionCanvasElement;
-        let emotionCanvasCtx;
-        let confusionFrames = 0;
-        let isExplaining = false;
-
-        async function toggleEmotion() {
-            if (emotionActive) {
-                stopEmotion();
-                setDot('dot-emotion', '');
-                return;
-            }
-            if (focusActive) { stopFocusGuard(false); }
-            if (gestureActive) { stopGestures(); setDot('dot-gesture', ''); }
-
-            showToast('📷 Starting Emotion Engine...');
-            setDot('dot-emotion', 'warn');
-            setControlState('btn-emotion', 'warn');
-
-            try {
-                // Request camera directly — this gives a clean permission error if denied
-                emotionStream = await requestCameraStream();
-
-                // Set up hidden video element to receive the stream
-                emotionVideoEl = document.createElement('video');
-                emotionVideoEl.srcObject = emotionStream;
-                emotionVideoEl.style.display = 'none';
-                emotionVideoEl.playsInline = true;
-                document.body.appendChild(emotionVideoEl);
-                await emotionVideoEl.play();
-
-                // Set up FaceMesh (once)
-                if (!faceMesh) {
-                    emotionCanvasElement = document.getElementById('emotion-canvas');
-                    emotionCanvasCtx = emotionCanvasElement.getContext('2d');
-
-                    faceMesh = new FaceMesh({
-                        locateFile: (file) => new URL(file, 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/').toString()
-                    });
-                    faceMesh.setOptions({
-                        maxNumFaces: 1, refineLandmarks: true,
-                        minDetectionConfidence: 0.5, minTrackingConfidence: 0.5
-                    });
-                    faceMesh.onResults(onEmotionResults);
-                }
-
-                emotionActive = true;
-                document.getElementById('emotion-canvas').style.display = 'block';
-                setDot('dot-emotion', 'active');
-                setControlState('btn-emotion', 'active');
-                showToast('🎭 Emotion Engine Active');
-
-                // Start frame loop
-                async function emotionLoop() {
-                    if (!emotionActive) return;
-                    if (emotionVideoEl && emotionVideoEl.readyState >= 2) {
-                        await faceMesh.send({ image: emotionVideoEl });
-                    }
-                    emotionRAF = requestAnimationFrame(emotionLoop);
-                }
-                emotionLoop();
-
-            } catch(err) {
-                setDot('dot-emotion', '');
-                setControlState('btn-emotion', '');
-                emotionActive = false;
-                stopStream(emotionStream);
-                emotionStream = null;
-                showToast('⚠️ Emotion camera error: ' + formatCameraError(err));
-                console.error('[EmotionEngine]', err);
-            }
-        }
-
-        function stopEmotion() {
-            emotionActive = false;
-            cancelAnimationFrame(emotionRAF);
-            if (emotionStream) {
-                stopStream(emotionStream);
-                emotionStream = null;
-            }
-            if (emotionVideoEl) { emotionVideoEl.remove(); emotionVideoEl = null; }
-            document.getElementById('emotion-canvas').style.display = 'none';
-            setControlState('btn-emotion', '');
-            showToast('🎭 Emotion Engine Off');
-        }
-
-
-        function onEmotionResults(results) {
-            if (!emotionActive || isExplaining) return;
-
-            emotionCanvasCtx.save();
-            emotionCanvasCtx.clearRect(0, 0, emotionCanvasElement.width, emotionCanvasElement.height);
-            emotionCanvasCtx.drawImage(results.image, 0, 0, emotionCanvasElement.width, emotionCanvasElement.height);
-
-            // Semi-transparent dark overlay for readability
-            emotionCanvasCtx.fillStyle = 'rgba(6, 8, 17, 0.45)';
-            emotionCanvasCtx.fillRect(0, 0, emotionCanvasElement.width, emotionCanvasElement.height);
-
-            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                const landmarks = results.multiFaceLandmarks[0];
-
-                // ── SIGNAL 1: Brow furrow (brow pinch distance) ──────────────
-                const leftBrow  = landmarks[105];
-                const rightBrow = landmarks[334];
-                const leftFace  = landmarks[234];
-                const rightFace = landmarks[454];
-                const faceWidth = Math.hypot(rightFace.x - leftFace.x, rightFace.y - leftFace.y);
-                const browDist  = Math.hypot(rightBrow.x - leftBrow.x, rightBrow.y - leftBrow.y);
-                const browRatio = browDist / (faceWidth + 0.001);
-                // Furrow signal: low ratio = brows close together = confusion
-                const browSignal = browRatio < 0.18 ? 1 : (browRatio < 0.22 ? 0.4 : 0);
-
-                // ── SIGNAL 2: Eye openness (eye aspect ratio) ─────────────────
-                // Left eye: 159 (top), 145 (bottom), 33 (left), 133 (right)
-                const lEyeH = Math.hypot(landmarks[159].x - landmarks[145].x, landmarks[159].y - landmarks[145].y);
-                const lEyeW = Math.hypot(landmarks[33].x  - landmarks[133].x, landmarks[33].y  - landmarks[133].y);
-                const lEAR  = lEyeH / (lEyeW + 0.001);
-                // Right eye: 386, 374, 362, 263
-                const rEyeH = Math.hypot(landmarks[386].x - landmarks[374].x, landmarks[386].y - landmarks[374].y);
-                const rEyeW = Math.hypot(landmarks[362].x - landmarks[263].x, landmarks[362].y - landmarks[263].y);
-                const rEAR  = rEyeH / (rEyeW + 0.001);
-                const avgEAR = (lEAR + rEAR) / 2;
-                // Squinting signal: very low EAR = eyes closed/squinting
-                const eyeSignal = avgEAR < 0.12 ? 1 : (avgEAR < 0.18 ? 0.3 : 0);
-
-                // ── SIGNAL 3: Mouth open (jaw drop) ───────────────────────────
-                // Upper lip: 13, Lower lip: 14
-                const mouthH = Math.hypot(landmarks[13].x - landmarks[14].x, landmarks[13].y - landmarks[14].y);
-                const mouthW = Math.hypot(landmarks[61].x - landmarks[291].x, landmarks[61].y - landmarks[291].y);
-                const mouthRatio = mouthH / (mouthW + 0.001);
-                // Surprised/confused: mouth slightly open
-                const mouthSignal = mouthRatio > 0.15 ? Math.min(1, mouthRatio * 4) : 0;
-
-                // ── COMBINED CONFUSION SCORE ──────────────────────────────────
-                const confusionScore = (browSignal * 0.55) + (eyeSignal * 0.25) + (mouthSignal * 0.2);
-                const confusionPct   = Math.round(confusionScore * 100);
-
-                // Determine emotion state
-                let emotionLabel, emotionColor;
-                if (confusionScore > 0.55) { emotionLabel = '😕 Confused'; emotionColor = '#FB7185'; confusionFrames++; }
-                else if (confusionScore > 0.3) { emotionLabel = '🤔 Thinking'; emotionColor = '#F59E0B'; confusionFrames = Math.max(0, confusionFrames - 1); }
-                else { emotionLabel = '✅ Focused'; emotionColor = '#34D399'; confusionFrames = Math.max(0, confusionFrames - 3); }
-
-                // ── DRAW FACE MESH (colored by state) ────────────────────────
-                drawConnectors(emotionCanvasCtx, landmarks, FACEMESH_TESSELATION,
-                    { color: emotionColor + '55', lineWidth: 0.5 });
-                drawConnectors(emotionCanvasCtx, landmarks, FACEMESH_LEFT_EYE,
-                    { color: '#06B6D4', lineWidth: 1.5 });
-                drawConnectors(emotionCanvasCtx, landmarks, FACEMESH_RIGHT_EYE,
-                    { color: '#06B6D4', lineWidth: 1.5 });
-                drawConnectors(emotionCanvasCtx, landmarks, FACEMESH_LIPS,
-                    { color: emotionColor, lineWidth: 1.5 });
-
-                // ── HUD OVERLAY ───────────────────────────────────────────────
-                const W = emotionCanvasElement.width, H = emotionCanvasElement.height;
-
-                // Emotion label badge
-                emotionCanvasCtx.fillStyle = 'rgba(0,0,0,0.75)';
-                emotionCanvasCtx.fillRect(6, 6, 200, 26);
-
-                emotionCanvasCtx.fillStyle = emotionColor;
-                emotionCanvasCtx.font = 'bold 13px Outfit, Arial';
-                emotionCanvasCtx.fillText(`${emotionLabel}  ${confusionPct}%`, 12, 23);
-
-                // Confusion progress bar
-                emotionCanvasCtx.fillStyle = 'rgba(0,0,0,0.5)';
-                emotionCanvasCtx.fillRect(6, 36, 200, 8);
-                emotionCanvasCtx.fillStyle = emotionColor;
-                emotionCanvasCtx.fillRect(6, 36, 200 * confusionScore, 8);
-
-                // Signal breakdown (small text)
-                emotionCanvasCtx.fillStyle = 'rgba(255,255,255,0.6)';
-                emotionCanvasCtx.font = '9px Arial';
-                emotionCanvasCtx.fillText(`Brow:${Math.round(browSignal*100)}% Eye:${Math.round(eyeSignal*100)}% Mouth:${Math.round(mouthSignal*100)}%`, 6, 56);
-
-                // Trigger explanation after ~45 consecutive confused frames (~1.5 sec)
-                if (confusionFrames > 45) {
-                    triggerExplanation();
-                }
+            if(autopilotEnabled) {
+                showAutopilotPopup("🧠 Autopilot Engaged: Biometric monitoring active");
             } else {
-                // No face detected
-                emotionCanvasCtx.fillStyle = 'rgba(0,0,0,0.6)';
-                emotionCanvasCtx.fillRect(6, 6, 170, 24);
-                emotionCanvasCtx.fillStyle = '#94A3B8';
-                emotionCanvasCtx.font = '12px Arial';
-                emotionCanvasCtx.fillText('👤 No face detected', 12, 22);
+                showAutopilotPopup("Autopilot Disabled");
             }
-            emotionCanvasCtx.restore();
         }
 
+        function showAutopilotPopup(msg) {
+            const popup = document.getElementById('autopilot-popup');
+            if(!popup) return;
+            popup.textContent = msg;
+            popup.classList.add('show');
+            clearTimeout(autopilotPopupTimeout);
+            autopilotPopupTimeout = setTimeout(() => popup.classList.remove('show'), 3000);
+        }
 
-        async function triggerExplanation() {
-            isExplaining = true;
-            confusionFrames = 0;
-            const vid = document.getElementById('vid');
-            vid.pause();
+        function toggleCogniWidget() {
+            cogniWidgetVisible = !cogniWidgetVisible;
+            document.getElementById('cogni-widget').classList.toggle('show', cogniWidgetVisible);
+        }
 
-            showToast("🧠 CONFUSION DETECTED");
+        // Called by focus.js module to push live score
+        window.cwUpdateFocus = function(score, active) {
+            _liveFocusScore = active ? score : null;
+            if (active) CogniTelemetry.pushFocus(score);
+            renderLivePulse();
+            
+            // Autopilot Logic
+            if(autopilotEnabled && active) {
+                const vid = document.getElementById('vid');
+                if(vid) {
+                    if (score < 30 && !vid.paused) {
+                        vid.pause();
+                        showAutopilotPopup("🧠 Focus drop (<30). Video paused automatically.");
+                        CogniTelemetry.recordEvent('focus_drop', { signal: 'low_focus', value: score });
+                        const now = Date.now();
+                        if (now - lastAutopilotInterventionAt > 30000) {
+                            lastAutopilotInterventionAt = now;
+                            runAutopilotIntervention('focus_drop');
+                        }
+                    } else if (score > 85 && !vid.paused && vid.playbackRate !== 1.25) {
+                        vid.playbackRate = 1.25;
+                        showAutopilotPopup("🧠 High Focus detected. Accelerating to 1.25x.");
+                    } else if (score >= 30 && score <= 85 && !vid.paused && vid.playbackRate !== 1.0) {
+                        vid.playbackRate = 1.0;
+                    }
+                }
+            }
 
+            if (!cogniWidgetVisible) return;
+            const pct = active ? Math.round(score) : null;
+            const circ = 144;
+            const fill = document.getElementById('cw-ring-fill');
+            const num = document.getElementById('cw-ring-num');
+            const val = document.getElementById('cw-focus');
+            if (pct !== null) {
+                const offset = circ - (circ * pct / 100);
+                fill.style.strokeDashoffset = offset;
+                fill.style.stroke = pct > 70 ? '#34D399' : pct > 40 ? '#F59E0B' : '#FB7185';
+                num.textContent = pct + '%';
+                val.textContent = pct + '%';
+                val.style.color = pct > 70 ? '#34D399' : pct > 40 ? '#F59E0B' : '#FB7185';
+            } else {
+                fill.style.strokeDashoffset = circ;
+                fill.style.stroke = 'var(--accent)';
+                num.textContent = '--';
+                val.textContent = 'OFF';
+                val.style.color = '';
+            }
+        };
+
+        // Called by emotion.js module to push live emotion state
+        window.cwUpdateEmotion = function(label, state) {
+            _liveEmotion = label;
+            CogniTelemetry.emotion = label || 'OFFLINE';
+            renderLivePulse();
+            
+            // Autopilot Logic
+            if(autopilotEnabled) {
+                const vid = document.getElementById('vid');
+                const normalized = String(label || '').toLowerCase();
+                if(vid) {
+                    if ((state === 'confused' || normalized.includes('confused')) && !vid.paused) {
+                        vid.pause();
+                        showAutopilotPopup(`🧠 ${label} detected. Paused for clarification.`);
+                        CogniTelemetry.recordEvent('confusion_detected', { signal: state, value: 1, label });
+                        const now = Date.now();
+                        if (now - lastAutopilotInterventionAt > 30000) {
+                            lastAutopilotInterventionAt = now;
+                            runAutopilotIntervention('confusion_detected');
+                        }
+                    } else if ((state === 'thinking' || normalized.includes('thinking')) && !vid.paused && vid.playbackRate !== 0.85) {
+                        vid.playbackRate = 0.85;
+                        showAutopilotPopup(`🧠 ${label} detected. Slowing to 0.85x.`);
+                    } else if ((state === 'focused' || normalized.includes('focused')) && !vid.paused && vid.playbackRate !== 1.0) {
+                        vid.playbackRate = 1.0;
+                    }
+                }
+            }
+
+            if (!cogniWidgetVisible) return;
+            const chip = document.getElementById('cw-emotion-chip');
+            if (!chip) return;
+            chip.className = 'ec ' + (state || 'offline');
+            chip.textContent = label || 'OFFLINE';
+        };
+
+        // Focus alert counter (called by focus.js when video pauses)
+        window.cwAlertTick = function() {
+            focusAlerts++;
+            document.getElementById('cw-alerts').textContent = focusAlerts;
+        };
+
+        // Session timer
+        function fmtTime(ms) {
+            const s = Math.floor(ms / 1000);
+            const m = Math.floor(s / 60);
+            return String(m).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+        }
+        setInterval(() => {
+            const t = fmtTime(Date.now() - sessionStart);
+            const topEl = document.getElementById('session-timer');
+            const cwEl = document.getElementById('cw-session');
+            const timerEl = document.getElementById('cw-timer');
+            if (topEl) topEl.textContent = t;
+            if (cwEl) cwEl.textContent = t;
+            if (timerEl) timerEl.textContent = t;
+        }, 1000);
+
+        // ── NAV TAB INDICATOR ─────────────────────────────────────────────
+        function updateTabIndicator(btn) {
+            const bar = document.getElementById('nav-bar');
+            const ind = document.getElementById('nav-indicator');
+            if (!bar || !ind || !btn) return;
+            const barRect = bar.getBoundingClientRect();
+            const btnRect = btn.getBoundingClientRect();
+            ind.style.left = (btnRect.left - barRect.left + bar.scrollLeft) + 'px';
+            ind.style.width = btnRect.width + 'px';
+        }
+        // Patch tab() to also update indicator
+        const _origTab = tab;
+        window.tab = function(id, btn) {
+            _origTab(id, btn);
+            updateTabIndicator(btn);
+        };
+        // Init indicator on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const activeBtn = document.querySelector('.nav-pill.active');
+            setTimeout(() => updateTabIndicator(activeBtn), 100);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+            const target = event.target;
+            const tag = target?.tagName;
+            const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable;
+            if (editable) return;
+            const key = String(event.key || '').toLowerCase();
+            const handlers = {
+                '1': () => openNamedTab('transcript'),
+                '2': () => openPulseTab(),
+                '3': () => openNotesTab(),
+                '4': () => openQuizTab(),
+                '5': () => openSlidesTab(),
+                '9': () => openQuestTab(),
+                'n': () => seedTimestampNote(),
+                '/': () => focusQueryInput(),
+            };
+            const handler = handlers[key];
+            if (!handler) return;
+            event.preventDefault();
+            handler();
+        });
+
+        // ── TYPING INDICATOR ──────────────────────────────────────────────
+        function showTyping() {
+            removeTyping();
             const c = document.getElementById('chat');
-            c.innerHTML += `<div class="bubble ai" style="color:var(--red);">Analyzing facial expressions... High Cognitive Load detected. Asking AI for an explanation...</div>`;
+            const t = document.createElement('div');
+            t.id = 'typing-indicator';
+            t.className = 'typing-bubble';
+            t.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+            c.appendChild(t);
             c.scrollTop = c.scrollHeight;
-
-            try {
-                const r = await fetch('/explain_context', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ timestamp: vid.currentTime })
-                });
-                const d = await r.json();
-                c.innerHTML += `<div class="bubble ai" style="border: 1px solid var(--red); box-shadow: 0 0 10px var(--red);">${d.explanation.replace(/\n/g, '<br>')}</div>`;
-            } catch (e) {
-                c.innerHTML += `<div class="bubble ai" style="color:var(--red)">Connection Failure.</div>`;
-            }
-            c.scrollTop = c.scrollHeight;
-
-            // Allow triggering again after 10 seconds
-            setTimeout(() => { isExplaining = false; }, 10000);
         }
+        function removeTyping() {
+            const t = document.getElementById('typing-indicator');
+            if (t) t.remove();
+        }
+
     </script>
     <script>
         // --- CEREBRAL HERTZ (BINAURAL BEATS) ---

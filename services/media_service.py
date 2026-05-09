@@ -11,21 +11,21 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from config import UPLOAD_FOLDER, SLIDES_FOLDER
 
 # --- INITIALIZATION ---
-print("⚙️  Initializing Media Systems...")
+print("[Media] Initializing media systems...")
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"🖥️  Hardware Detected: {device.upper()}")
+print(f"[Media] Hardware detected: {device.upper()}")
 
-print("👁️  Loading OCR...")
+print("[Media] Loading OCR...")
 reader = easyocr.Reader(['en'], gpu=(device == "cuda")) 
 
-print("⏳ Loading Whisper...")
+print("[Media] Loading Whisper...")
 model = whisper.load_model("tiny", device=device)
 
-print("✅ Media Systems Ready!")
+print("[Media] Systems ready.")
 
 # --- FUNCTIONS ---
 def get_youtube_transcript_fast(video_url):
-    print("⚡ Attempting Instant Transcript Fetch...")
+    print("[Transcript] Attempting instant transcript fetch...")
     try:
         video_id = re.search(r"(?:v=|\/)([\w-]{11})", video_url)
         if not video_id: return None, None
@@ -38,13 +38,13 @@ def get_youtube_transcript_fast(video_url):
             m, s = divmod(start, 60)
             formatted_text += f"[{m:02d}:{s:02d}] {text}\n"
             segments.append({"start": start, "text": text})
-        print("⚡ Success! Instant Transcript loaded.")
+        print("[Transcript] Instant transcript loaded.")
         return formatted_text, segments
     except: return None, None
 
 def process_audio(video_path, progress_callback=None):
     if progress_callback: progress_callback("Processing Audio (Whisper)...")
-    print("🎤 [Whisper] Audio processing started...")
+    print("[Whisper] Audio processing started...")
     try:
         use_fp16 = (device == "cuda")
         result = model.transcribe(video_path, fp16=use_fp16)
@@ -52,7 +52,7 @@ def process_audio(video_path, progress_callback=None):
         for segment in result["segments"]:
             m, s = divmod(int(segment['start']), 60)
             timestamped_text += f"[{m:02d}:{s:02d}] {segment['text']}\n"
-        print("✅ Audio complete.")
+        print("[Whisper] Audio complete.")
         return timestamped_text, result["segments"]
     except Exception as e: 
         print(f"Audio processing error: {e}")
@@ -60,10 +60,10 @@ def process_audio(video_path, progress_callback=None):
 
 def process_visuals(video_path, progress_callback=None):
     if progress_callback: progress_callback("Scanning Visuals (OCR)...")
-    print("📸 [Vision] Visual processing started...")
+    print("[Vision] Visual processing started...")
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print("❌ Error: Could not open video for visuals processing.")
+        print("[Vision] Error: Could not open video for visuals processing.")
         return [], ""
 
     saved_slides = []
@@ -109,11 +109,11 @@ def process_visuals(video_path, progress_callback=None):
                 slide_count += 1
         except: continue
     cap.release()
-    print(f"✅ Visuals complete. Found {len(saved_slides)} slides.")
+    print(f"[Vision] Visuals complete. Found {len(saved_slides)} slides.")
     return saved_slides, full_ocr_text
 
 def download_youtube_video(url, output_filename=None):
-    print(f"🔗 Downloading YouTube: {url}")
+    print(f"[YouTube] Downloading: {url}")
     if not output_filename:
         output_filename = f"video_{int(datetime.now().timestamp())}.mp4"
     filepath = os.path.join(UPLOAD_FOLDER, output_filename)

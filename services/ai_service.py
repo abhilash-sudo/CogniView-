@@ -12,6 +12,7 @@ TASK_MODEL = {
     "mindmap": POWER_MODEL,
     "summary": FAST_MODEL,
     "flashcards": FAST_MODEL,
+    "quiz": FAST_MODEL,
     "podcast": FAST_MODEL,
     "concepts": FAST_MODEL,
 }
@@ -49,7 +50,7 @@ def ask_ai(system_prompt, user_prompt, model=None):
         )
         return r.choices[0].message.content
     except Exception as e:
-        print(f"⚠️ [{use_model}] failed ({e}). Falling back to fast model...")
+        print(f"[AI] {use_model} failed ({e}). Falling back to fast model...")
         try:
             r = client.chat.completions.create(
                 messages=[{"role":"system","content":system_prompt},{"role":"user","content":user_prompt}],
@@ -125,29 +126,29 @@ Now analyze the following text and produce JSON in exactly this format:"""
         raw = ask_ai_for_task("mindmap", sys, clean_text)
         result = try_parse(raw)
         if result:
-            print(f"[MindMap] ✅ Parsed successfully: {result['title']} ({len(result['branches'])} branches)")
+            print(f"[MindMap] Parsed successfully: {result['title']} ({len(result['branches'])} branches)")
             _cache_set("mindmap", clean_text, result)
             return result
         
         # Retry with simpler/faster model and even more explicit prompt
-        print("[MindMap] ⚠️ First parse failed, retrying with strict prompt...")
+        print("[MindMap] First parse failed, retrying with strict prompt...")
         retry_sys = 'Output ONLY valid JSON. No text before or after. Format: {"title":"TOPIC","branches":[{"name":"BRANCH","items":["item1","item2","item3"]}]}'
         retry_prompt = f"Create a mind map JSON for this content (extract real key points): {clean_text[:8000]}"
         raw2 = ask_ai_for_task("mindmap", retry_sys, retry_prompt)
         result2 = try_parse(raw2)
         if result2:
-            print(f"[MindMap] ✅ Retry succeeded: {result2['title']}")
+            print(f"[MindMap] Retry succeeded: {result2['title']}")
             _cache_set("mindmap", clean_text, result2)
             return result2
         
-        print(f"[MindMap] ❌ Both attempts failed. Raw output: {raw[:300]}")
+        print(f"[MindMap] Both attempts failed. Raw output: {raw[:300]}")
         # Generate a basic one from the text directly without AI
         first_line = lines[0][:50] if lines else "Lecture Notes"
         fallback = {"title": first_line, "branches": [{"name": "Key Content", "items": [l[:40] for l in lines[1:6]]}]}
         _cache_set("mindmap", clean_text, fallback)
         return fallback
     except Exception as e:
-        print(f"[MindMap] ❌ Exception: {e}")
+        print(f"[MindMap] Exception: {e}")
         fallback = {"title": "Processing Error", "branches": [{"name": "Error", "items": [str(e)[:50]]}]}
         _cache_set("mindmap", clean_text, fallback)
         return fallback
@@ -179,75 +180,131 @@ def simplify_context(text):
         return res
     except: return "I'm sorry, I encountered an error trying to process that segment."
 
-
 def generate_flashcards(text):
     """Returns a JSON array of {front, back} flashcard objects from the transcript."""
     sys = """You are a flashcard generator. Create exactly 10 study flashcards from the content.
 OUTPUT RULES:
-- Output ONLY a valid JSON array. No markdown, no explanation, no code fences.
-- Each card: {"front": "question or concept (max 12 words)", "back": "answer/definition (max 30 words)"}
-- Questions must test real, specific knowledge from the text (facts, definitions, dates, processes)
-- Vary difficulty: mix basic recall and deeper understanding questions
-
-EXAMPLE (for a lecture on Neural Networks):
-[{"front":"What is a neural network?","back":"A system of interconnected nodes that processes data in layers, inspired by the human brain's structure."},{"front":"What does 'backpropagation' do?","back":"It adjusts neural network weights backwards from the output layer to minimize prediction error."}]
-
+- Output ONLY a valid JSON object with a "cards" array. No markdown, no explanation.
+- Format: {"cards": [{"front": "question (max 12 words)", "back": "answer (max 30 words)"}]}
+- Questions must test real, specific knowledge from the text.
+- Vary difficulty.
 Now generate 10 flashcards from this content:"""
     cached = _cache_get("flashcards", text)
     if cached is not None:
-        return cached
+        if isinstance(cached, list) and len(cached) > 0 and cached[0].get("front") != "Error generating flashcards":
+            return cached
     try:
         raw = ask_ai_for_task("flashcards", sys, text)
-        raw = re.sub(r'```(?:json)?', '', raw).strip().rstrip('`').strip()
-        start = raw.find('[')
-        end = raw.rfind(']') + 1
+        import re as _re, json as _json
+        raw = _re.sub(r'```(?:json)?', '', raw).strip().rstrip('`').strip()
+        start = raw.find('{')
+        end = raw.rfind('}') + 1
         if start == -1 or end == 0:
-            raise ValueError("No JSON array")
-        cards = json.loads(raw[start:end])
-        # Validate each card
+            raise ValueError("No JSON object")
+        data = _json.loads(raw[start:end])
+        cards = data.get("cards", [])
         valid = [c for c in cards if 'front' in c and 'back' in c]
-        print(f"[Flashcards] ✅ Generated {len(valid)} cards")
+        if not valid: raise ValueError("No valid cards generated")
+        print(f"[Flashcards] Generated {len(valid)} cards")
         _cache_set("flashcards", text, valid)
         return valid
     except Exception as e:
-        print(f"[Flashcards] ❌ Failed: {e}")
+        print(f"[Flashcards] Failed: {e}")
         fallback = [{"front": "Error generating flashcards", "back": str(e)[:80]}]
         _cache_set("flashcards", text, fallback)
         return fallback
 
-
 def generate_summary(text):
-    """Returns a structured summary: tldr, bullets, key_terms, difficulty."""
+    """Returns a structured summary: tldr, sections, bullets, key_terms, difficulty."""
     sys = """You are a smart study assistant. Analyze the text and output a structured study summary as STRICT JSON.
 OUTPUT ONLY the JSON object. No markdown, no explanation.
 FORMAT:
 {
   "tldr": "One sentence (max 25 words) capturing the core point of the entire content",
-  "bullets": ["Key point 1 (max 15 words)", "Key point 2", "Key point 3", "Key point 4", "Key point 5", "Key point 6"],
-  "key_terms": [{"term": "Term Name", "definition": "Short definition (max 15 words)"}, ...],
-  "difficulty": "Beginner|Intermediate|Advanced",
-  "topics": ["Topic1", "Topic2", "Topic3"]
+  "sections": [
+    {"header": "Section Title", "content": "Detailed paragraph explaining this section's core concepts"}
+  ],
+  "bullets": ["Key point 1 (max 15 words)", "Key point 2", "Key point 3"],
+  "key_terms": [{"term": "Term Name", "definition": "Short definition (max 15 words)"}],
+  "difficulty": "Beginner|Intermediate|Advanced"
 }
-- bullets: exactly 6 specific, actionable key points from the text
-- key_terms: exactly 5 important technical terms or concepts defined from the text
-- difficulty: assess the complexity level of the content
+- sections: Break the content into 3-5 logical sections. Provide a rich paragraph for each.
+- bullets: exactly 4-6 specific, actionable key points from the text
+- key_terms: exactly 4-6 important technical terms defined
 Now generate the summary for:"""
     cached = _cache_get("summary", text)
     if cached is not None:
-        return cached
+        if isinstance(cached, dict) and cached.get("tldr") != "Could not generate summary." and "sections" in cached:
+            return cached
     try:
         raw = ask_ai_for_task("summary", sys, text)
-        raw = re.sub(r'```(?:json)?', '', raw).strip().rstrip('`').strip()
+        import re as _re, json as _json
+        raw = _re.sub(r'```(?:json)?', '', raw).strip().rstrip('`').strip()
         start = raw.find('{')
         end = raw.rfind('}') + 1
         if start == -1 or end == 0:
             raise ValueError("No JSON object")
-        data = json.loads(raw[start:end])
-        print(f"[Summary] ✅ Generated summary: {data.get('difficulty','?')} difficulty")
+        data = _json.loads(raw[start:end])
+        print(f"[Summary] Generated summary: {data.get('difficulty','?')} difficulty")
         _cache_set("summary", text, data)
         return data
     except Exception as e:
-        print(f"[Summary] ❌ Failed: {e}")
-        fallback = {"tldr": "Could not generate summary.", "bullets": [], "key_terms": [], "difficulty": "Unknown", "topics": []}
+        print(f"[Summary] Failed: {e}")
+        fallback = {"tldr": "Could not generate summary.", "sections": [], "bullets": [], "key_terms": [], "difficulty": "Unknown"}
         _cache_set("summary", text, fallback)
         return fallback
+
+def generate_quiz_v2(text):
+    sys_prompt = (
+        "You are a quiz master. Generate exactly 5 MCQs. "
+        "OUTPUT ONLY a valid JSON object with a 'questions' array. "
+        'Format: {"questions": [{"q":"Question?","options":["A. o1","B. o2","C. o3","D. o4"],"correct":0,"explanation":"reason","difficulty":"Easy|Medium|Hard"}]} '
+        "correct is 0-indexed. Mix Easy/Medium/Hard. Generate from content:"
+    )
+    cached = _cache_get("quiz", text)
+    if cached is not None:
+        if isinstance(cached, list) and len(cached) > 0 and "generation failed" not in cached[0].get("q", ""):
+            return cached
+    try:
+        import re as _re, json as _json
+        raw = ask_ai_for_task("quiz", sys_prompt, text[:20000])
+        raw = _re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+        s, e = raw.find("{"), raw.rfind("}") + 1
+        if s == -1 or e == 0:
+            raise ValueError("No JSON object")
+        data = _json.loads(raw[s:e])
+        qs = data.get("questions", [])
+        valid = [q for q in qs if "q" in q and "options" in q and "correct" in q]
+        if not valid: raise ValueError("No valid questions generated")
+        print(f"[Quiz] Generated {len(valid)} questions")
+        _cache_set("quiz", text, valid)
+        return valid
+    except Exception as ex:
+        print(f"[Quiz] Failed: {ex}")
+        fallback = [{"q": "Quiz generation failed.", "options": ["A. Retry"], "correct": 0, "explanation": str(ex)[:60], "difficulty": "Unknown"}]
+        _cache_set("quiz", text, fallback)
+        return fallback
+
+def generate_debate(context, query):
+    sys_prompt = """You are a panel of 3 distinct AI Personas:
+1. "Tutor" (Encouraging, Socratic, asks guiding questions)
+2. "ELI5" (Uses extremely simple analogies)
+3. "Critic" (Devil's advocate, challenges assumptions)
+
+The user has asked a question. Generate a short, multi-agent debate/discussion answering the user.
+OUTPUT ONLY a valid JSON array.
+FORMAT: [{"persona": "Tutor", "text": "..."}, {"persona": "ELI5", "text": "..."}]
+Include 2 to 4 exchanges in the array."""
+    try:
+        import re as _re, json as _json
+        user_prompt = f"Context: {context[:5000]}\n\nUser Question: {query}"
+        raw = ask_ai_for_task("chat", sys_prompt, user_prompt)
+        raw = _re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+        s, e = raw.find("["), raw.rfind("]") + 1
+        if s == -1 or e == 0:
+            raise ValueError("No JSON array")
+        data = _json.loads(raw[s:e])
+        return data
+    except Exception as ex:
+        print(f"[Debate] Failed: {ex}")
+        return [{"persona": "System", "text": "Sorry, the multi-agent panel is offline."}]
